@@ -96,6 +96,26 @@
     <string name="cancel_button">Cancel</string>
     <string name="back_to_plans">Back to Plans</string>
 
+    <!-- Nearby Hardware Discovery (Bluetooth, Wi-Fi, GPS) -->
+    <string name="discovery_source_all">All 🌐</string>
+    <string name="discovery_source_bluetooth">Bluetooth 🔵</string>
+    <string name="discovery_source_wifi">Wi-Fi 📶</string>
+    <string name="discovery_source_gps">Banhelha Members 📍</string>
+    <string name="discovery_source_uninstalled">Needs Invite ✉️</string>
+    <string name="scan_nearby_button">Scan Bluetooth &amp; Wi-Fi</string>
+    <string name="scanning_nearby_status">Scanning nearby Bluetooth and Wi-Fi signals...</string>
+    <string name="discovered_devices_count">%1$d devices and people discovered nearby</string>
+    <string name="invite_to_download_app">Invite to Download Banhelha &amp; Connect</string>
+    <string name="invite_via_whatsapp">Invite via WhatsApp 💬</string>
+    <string name="invite_via_sms">Invite via SMS 📱</string>
+    <string name="invite_share_link">Share Invite Link 🔗</string>
+    <string name="device_not_installed">App not installed (Discovered via %1$s)</string>
+    <string name="signal_strength_label">Signal Strength: %1$d dBm</string>
+    <string name="device_mac_label">Identifier / MAC: %1$s</string>
+    <string name="bluetooth_active_badge">Bluetooth 🔵</string>
+    <string name="wifi_active_badge">Wi-Fi 📶</string>
+    <string name="gps_active_badge">Banhelha Member 📍</string>
+
     <!-- Profile Screen -->
     <string name="profile_settings_title">Profile &amp; Settings</string>
     <string name="dashboard_button">General Manager Dashboard</string>

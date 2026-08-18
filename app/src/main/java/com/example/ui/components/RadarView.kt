@@ -28,17 +28,19 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.model.TrustRelationshipEntity
 import com.example.data.model.UserEntity
+import com.example.data.nearby.DiscoveredPeer
+import com.example.data.nearby.PeerSource
 import com.example.ui.theme.*
 import kotlin.math.*
 
 @Composable
-fun RadarView(
+fun RadarPeerView(
     centerLat: Double,
     centerLng: Double,
     maxDistanceKm: Float,
-    users: List<UserEntity>,
-    selectedUser: UserEntity?,
-    onUserSelected: (UserEntity) -> Unit,
+    peers: List<DiscoveredPeer>,
+    selectedPeer: DiscoveredPeer?,
+    onPeerSelected: (DiscoveredPeer) -> Unit,
     modifier: Modifier = Modifier
 ) {
     // Infinite sweep rotation
@@ -47,7 +49,7 @@ fun RadarView(
         initialValue = 0f,
         targetValue = 360f,
         animationSpec = infiniteRepeatable(
-            animation = tween(4000, easing = LinearEasing),
+            animation = tween(3500, easing = LinearEasing),
             repeatMode = RepeatMode.Restart
         ),
         label = "sweep_angle"
@@ -58,7 +60,7 @@ fun RadarView(
         initialValue = 0.2f,
         targetValue = 1.0f,
         animationSpec = infiniteRepeatable(
-            animation = tween(2500, easing = FastOutSlowInEasing),
+            animation = tween(2200, easing = FastOutSlowInEasing),
             repeatMode = RepeatMode.Restart
         ),
         label = "pulse_scale"
@@ -68,7 +70,7 @@ fun RadarView(
         initialValue = 0.8f,
         targetValue = 0.0f,
         animationSpec = infiniteRepeatable(
-            animation = tween(2500, easing = FastOutSlowInEasing),
+            animation = tween(2200, easing = FastOutSlowInEasing),
             repeatMode = RepeatMode.Restart
         ),
         label = "pulse_alpha"
@@ -91,36 +93,35 @@ fun RadarView(
         Canvas(
             modifier = Modifier
                 .fillMaxSize()
-                .pointerInput(users, maxDistanceKm) {
+                .pointerInput(peers, maxDistanceKm) {
                     detectTapGestures { tapOffset ->
                         val centerX = size.width / 2f
                         val centerY = size.height / 2f
                         val maxRadius = min(centerX, centerY) * 0.85f
 
-                        // Find closest user to tap
-                        var closestUser: UserEntity? = null
+                        // Find closest peer to tap
+                        var closestPeer: DiscoveredPeer? = null
                         var minTouchDistance = Float.MAX_VALUE
 
-                        for (user in users) {
-                            val dLat = user.latitude - centerLat
-                            val dLng = user.longitude - centerLng
-                            // Scale coordinates to radar range
-                            val maxDelta = (maxDistanceKm / 111.0f).toDouble()
+                        for (peer in peers) {
+                            val dLat = peer.latitude - centerLat
+                            val dLng = peer.longitude - centerLng
+                            val maxDelta = (maxDistanceKm / 111.0f).toDouble().coerceAtLeast(0.0001)
                             val normX = (dLng / maxDelta).toFloat().coerceIn(-1f, 1f)
                             val normY = (-dLat / maxDelta).toFloat().coerceIn(-1f, 1f)
 
-                            val userPx = centerX + normX * maxRadius
-                            val userPy = centerY + normY * maxRadius
+                            val peerPx = centerX + normX * maxRadius
+                            val peerPy = centerY + normY * maxRadius
 
-                            val touchDist = sqrt((tapOffset.x - userPx).pow(2) + (tapOffset.y - userPy).pow(2))
+                            val touchDist = sqrt((tapOffset.x - peerPx).pow(2) + (tapOffset.y - peerPy).pow(2))
                             if (touchDist < 50.dp.toPx() && touchDist < minTouchDistance) {
                                 minTouchDistance = touchDist
-                                closestUser = user
+                                closestPeer = peer
                             }
                         }
 
-                        if (closestUser != null) {
-                            onUserSelected(closestUser)
+                        if (closestPeer != null) {
+                            onPeerSelected(closestPeer)
                         }
                     }
                 }
@@ -129,7 +130,7 @@ fun RadarView(
             val centerY = size.height / 2f
             val maxRadius = min(centerX, centerY) * 0.85f
 
-            // 1. Draw Concentric Circles & Range grid
+            // 1. Concentric Circles
             val rings = 4
             for (i in 1..rings) {
                 val r = maxRadius * (i.toFloat() / rings)
@@ -141,7 +142,7 @@ fun RadarView(
                 )
             }
 
-            // 2. Crosshair Axis Lines
+            // 2. Crosshairs
             drawLine(
                 color = GeoTealPrimary.copy(alpha = 0.15f),
                 start = Offset(centerX - maxRadius, centerY),
@@ -155,7 +156,7 @@ fun RadarView(
                 strokeWidth = 1.dp.toPx()
             )
 
-            // 3. Expanding Pulse Wave
+            // 3. Pulse Wave
             drawCircle(
                 color = GeoTealPrimary.copy(alpha = pulseAlpha * 0.35f),
                 radius = maxRadius * pulseScale,
@@ -163,7 +164,7 @@ fun RadarView(
                 style = Stroke(width = 2.dp.toPx())
             )
 
-            // 4. Radar Sweep Cone (Gradient Arc)
+            // 4. Sweep Cone
             drawArc(
                 brush = Brush.sweepGradient(
                     0.0f to Color.Transparent,
@@ -179,7 +180,7 @@ fun RadarView(
                 size = androidx.compose.ui.geometry.Size(maxRadius * 2, maxRadius * 2)
             )
 
-            // 5. Radar Sweep Leading Line
+            // 5. Sweep Line
             val rad = Math.toRadians(sweepAngle.toDouble())
             val lineEndX = centerX + (maxRadius * cos(rad)).toFloat()
             val lineEndY = centerY + (maxRadius * sin(rad)).toFloat()
@@ -190,7 +191,7 @@ fun RadarView(
                 strokeWidth = 2.dp.toPx()
             )
 
-            // 6. Center User Pinpoint (Self)
+            // 6. Center User Pin (Self)
             drawCircle(
                 color = GeoTealPrimary.copy(alpha = 0.2f),
                 radius = 16.dp.toPx(),
@@ -207,43 +208,63 @@ fun RadarView(
                 center = Offset(centerX, centerY)
             )
 
-            // 7. Render Nearby User Blips
-            val maxDelta = (maxDistanceKm / 111.0f).toDouble()
-            for (user in users) {
-                val dLat = user.latitude - centerLat
-                val dLng = user.longitude - centerLng
+            // 7. Render Nearby Peer Blips (Bluetooth, Wi-Fi, GPS)
+            val maxDelta = (maxDistanceKm / 111.0f).toDouble().coerceAtLeast(0.0001)
+            for (peer in peers) {
+                val dLat = peer.latitude - centerLat
+                val dLng = peer.longitude - centerLng
                 val normX = (dLng / maxDelta).toFloat().coerceIn(-1f, 1f)
                 val normY = (-dLat / maxDelta).toFloat().coerceIn(-1f, 1f)
 
-                val userPx = centerX + normX * maxRadius
-                val userPy = centerY + normY * maxRadius
-                val isSelected = selectedUser?.id == user.id
+                val peerPx = centerX + normX * maxRadius
+                val peerPy = centerY + normY * maxRadius
+                val isSelected = selectedPeer?.id == peer.id
 
-                val blipColor = when {
-                    user.isBot -> GeoPurpleAI
-                    user.subscriptionType == "business" -> GeoGold
-                    user.gender == "female" -> GeoMagentaTertiary
-                    else -> GeoAzureSecondary
+                val blipColor = when (peer.source) {
+                    PeerSource.BLUETOOTH -> Color(0xFF2563EB) // Royal Blue
+                    PeerSource.WIFI -> Color(0xFF10B981)      // Emerald Green
+                    PeerSource.GPS_COMMUNITY -> {
+                        val u = peer.userEntity
+                        when {
+                            u?.isBot == true -> GeoPurpleAI
+                            u?.subscriptionType == "business" -> GeoGold
+                            u?.gender == "female" -> GeoMagentaTertiary
+                            else -> GeoAzureSecondary
+                        }
+                    }
                 }
 
-                // Blip halo if selected
+                // Blip halo & Selection
                 if (isSelected) {
                     drawCircle(
-                        color = GeoTealPrimary.copy(alpha = 0.25f),
-                        radius = 20.dp.toPx(),
-                        center = Offset(userPx, userPy)
+                        color = blipColor.copy(alpha = 0.35f),
+                        radius = 22.dp.toPx(),
+                        center = Offset(peerPx, peerPy)
                     )
                     drawCircle(
                         color = blipColor,
-                        radius = 14.dp.toPx(),
-                        center = Offset(userPx, userPy),
-                        style = Stroke(width = 2.dp.toPx())
+                        radius = 15.dp.toPx(),
+                        center = Offset(peerPx, peerPy),
+                        style = Stroke(width = 2.5.dp.toPx())
                     )
                 } else {
                     drawCircle(
-                        color = blipColor.copy(alpha = 0.25f),
+                        color = blipColor.copy(alpha = 0.22f),
                         radius = 12.dp.toPx(),
-                        center = Offset(userPx, userPy)
+                        center = Offset(peerPx, peerPy)
+                    )
+                }
+
+                // If not installed, render a dashed invite beacon ring
+                if (!peer.hasAppInstalled) {
+                    drawCircle(
+                        color = blipColor.copy(alpha = 0.7f),
+                        radius = 10.dp.toPx(),
+                        center = Offset(peerPx, peerPy),
+                        style = Stroke(
+                            width = 1.5.dp.toPx(),
+                            pathEffect = PathEffect.dashPathEffect(floatArrayOf(4f, 4f), 0f)
+                        )
                     )
                 }
 
@@ -251,60 +272,118 @@ fun RadarView(
                 drawCircle(
                     color = blipColor,
                     radius = 6.dp.toPx(),
-                    center = Offset(userPx, userPy)
+                    center = Offset(peerPx, peerPy)
                 )
             }
         }
 
-        // Overlay Distance Ring Labels
+        // Overlay Distance & Sources info
         Column(
             modifier = Modifier
                 .align(Alignment.TopStart)
                 .padding(14.dp)
         ) {
-            Text(
-                text = "📍 Live Radar Scan",
-                color = GeoTealPrimary,
-                fontWeight = FontWeight.Bold,
-                fontSize = 12.sp
-            )
-            Text(
-                text = "${users.size} people in ${maxDistanceKm.toInt()}km radius",
-                color = Color(0xFF64748B),
-                fontSize = 10.sp
-            )
-        }
-
-        // Radar Range Indicator Badge
-        Surface(
-            color = Color.White.copy(alpha = 0.92f),
-            shape = RoundedCornerShape(12.dp),
-            shadowElevation = 2.dp,
-            border = androidx.compose.foundation.BorderStroke(1.dp, GeoDarkOutline),
-            modifier = Modifier
-                .align(Alignment.BottomEnd)
-                .padding(14.dp)
-        ) {
             Row(
-                modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
-                verticalAlignment = Alignment.CenterVertically
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp)
             ) {
                 Box(
                     modifier = Modifier
                         .size(8.dp)
                         .clip(CircleShape)
-                        .background(GeoGreenOnline)
+                        .background(GeoTealPrimary)
                 )
-                Spacer(modifier = Modifier.width(6.dp))
                 Text(
-                    text = "Radius: ${maxDistanceKm.toInt()} km",
-                    color = GeoDarkOnSurface,
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Medium
+                    text = "رادار المسح الميداني النشط",
+                    color = GeoTealPrimary,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 12.sp
                 )
+            }
+            Text(
+                text = "${peers.size} جهاز وشخص مكتشف (${maxDistanceKm.toInt()} كم)",
+                color = Color(0xFF64748B),
+                fontSize = 10.sp
+            )
+        }
+
+        // Mini Radar Legend on Bottom End
+        Surface(
+            color = Color.White.copy(alpha = 0.95f),
+            shape = RoundedCornerShape(12.dp),
+            shadowElevation = 2.dp,
+            border = androidx.compose.foundation.BorderStroke(1.dp, GeoDarkOutline),
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .padding(12.dp)
+        ) {
+            Row(
+                modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                LegendDot(color = Color(0xFF2563EB), label = "بلوتوث")
+                LegendDot(color = Color(0xFF10B981), label = "واي فاي")
+                LegendDot(color = GeoTealPrimary, label = "GPS")
             }
         }
     }
+}
+
+@Composable
+private fun LegendDot(color: Color, label: String) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(3.dp)
+    ) {
+        Box(
+            modifier = Modifier
+                .size(7.dp)
+                .clip(CircleShape)
+                .background(color)
+        )
+        Text(text = label, fontSize = 9.sp, color = Color(0xFF475569), fontWeight = FontWeight.Medium)
+    }
+}
+
+@Composable
+fun RadarView(
+    centerLat: Double,
+    centerLng: Double,
+    maxDistanceKm: Float,
+    users: List<UserEntity>,
+    selectedUser: UserEntity?,
+    onUserSelected: (UserEntity) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    // Keep backward compatible wrapper
+    val peers = remember(users) {
+        users.map { u ->
+            DiscoveredPeer(
+                id = "app_${u.id}",
+                name = u.name,
+                source = PeerSource.GPS_COMMUNITY,
+                hasAppInstalled = true,
+                distanceMeters = 50.0,
+                latitude = u.latitude,
+                longitude = u.longitude,
+                userEntity = u
+            )
+        }
+    }
+    val selectedPeer = peers.find { it.userEntity?.id == selectedUser?.id }
+
+    RadarPeerView(
+        centerLat = centerLat,
+        centerLng = centerLng,
+        maxDistanceKm = maxDistanceKm,
+        peers = peers,
+        selectedPeer = selectedPeer,
+        onPeerSelected = { p ->
+            p.userEntity?.let(onUserSelected)
+        },
+        modifier = modifier
+    )
 }
 
 @Composable

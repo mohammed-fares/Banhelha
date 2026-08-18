@@ -586,3 +586,209 @@ fun ServiceCard(
     }
 }
 
+@Composable
+fun DiscoveredPeerCard(
+    peer: com.example.data.nearby.DiscoveredPeer,
+    distanceStr: String,
+    onCardClick: () -> Unit,
+    onInviteClick: () -> Unit,
+    onChatClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val sourceColor = when (peer.source) {
+        com.example.data.nearby.PeerSource.BLUETOOTH -> Color(0xFF2563EB) // Blue
+        com.example.data.nearby.PeerSource.WIFI -> Color(0xFF10B981)      // Green
+        com.example.data.nearby.PeerSource.GPS_COMMUNITY -> GeoTealPrimary
+    }
+
+    val sourceLabel = when (peer.source) {
+        com.example.data.nearby.PeerSource.BLUETOOTH -> "بلوتوث 🔵"
+        com.example.data.nearby.PeerSource.WIFI -> "واي فاي 📶"
+        com.example.data.nearby.PeerSource.GPS_COMMUNITY -> "موقع GPS 📍"
+    }
+
+    val deviceIcon = when (peer.deviceType) {
+        "wearable" -> Icons.Default.Watch
+        "computer" -> Icons.Default.Laptop
+        "wifi_hotspot" -> Icons.Default.Wifi
+        else -> Icons.Default.Smartphone
+    }
+
+    Card(
+        modifier = modifier
+            .fillMaxWidth()
+            .clickable { onCardClick() }
+            .testTag("peer_card_${peer.id}"),
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(containerColor = GeoDarkSurface),
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+        border = CardDefaults.outlinedCardBorder().copy(
+            brush = Brush.linearGradient(
+                listOf(
+                    sourceColor.copy(alpha = 0.45f),
+                    GeoDarkOutline
+                )
+            )
+        )
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(14.dp)
+            ) {
+                // Device Icon Box
+                Box(
+                    modifier = Modifier
+                        .size(54.dp)
+                        .clip(RoundedCornerShape(16.dp))
+                        .background(sourceColor.copy(alpha = 0.12f))
+                        .border(1.5.dp, sourceColor.copy(alpha = 0.35f), RoundedCornerShape(16.dp)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = deviceIcon,
+                        contentDescription = peer.name,
+                        tint = sourceColor,
+                        modifier = Modifier.size(28.dp)
+                    )
+                }
+
+                Column(modifier = Modifier.weight(1f)) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Text(
+                            text = peer.name,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 15.sp,
+                            color = GeoDarkOnSurface,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f, fill = false)
+                        )
+                        // Source Badge
+                        Surface(
+                            color = sourceColor.copy(alpha = 0.12f),
+                            shape = RoundedCornerShape(8.dp)
+                        ) {
+                            Text(
+                                text = sourceLabel,
+                                color = sourceColor,
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(3.dp))
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Text(
+                            text = if (peer.distanceMeters < 1000) "${peer.distanceMeters.toInt()} متر" else String.format("%.1f كم", peer.distanceMeters / 1000.0),
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = GeoTealPrimary
+                        )
+                        Text(
+                            text = "•",
+                            fontSize = 12.sp,
+                            color = Color(0xFF94A3B8)
+                        )
+                        Text(
+                            text = "${peer.signalDbm} dBm",
+                            fontSize = 11.sp,
+                            color = Color(0xFF64748B)
+                        )
+                    }
+
+                    if (!peer.hasAppInstalled) {
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text(
+                            text = "غير مثبت للتطبيق • متاح للإرسال والدعوة",
+                            fontSize = 11.sp,
+                            color = Color(0xFFE11D48),
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
+                }
+            }
+
+            if (peer.bioOrInfo.isNotBlank()) {
+                Spacer(modifier = Modifier.height(10.dp))
+                Text(
+                    text = peer.bioOrInfo,
+                    fontSize = 12.sp,
+                    color = Color(0xFF475569),
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                if (!peer.hasAppInstalled) {
+                    Button(
+                        onClick = onInviteClick,
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = sourceColor),
+                        contentPadding = PaddingValues(vertical = 9.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Send,
+                            contentDescription = "إرسال دعوة",
+                            tint = Color.White,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = "إرسال دعوة لتنزيل بنحلها والتواصل",
+                            color = Color.White,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 12.sp
+                        )
+                    }
+                } else {
+                    OutlinedButton(
+                        onClick = onCardClick,
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(10.dp),
+                        contentPadding = PaddingValues(vertical = 8.dp)
+                    ) {
+                        Text(text = "الملف الشخصي", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    }
+                    Button(
+                        onClick = onChatClick,
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(10.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = GeoTealPrimary),
+                        contentPadding = PaddingValues(vertical = 8.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Chat,
+                            contentDescription = "محادثة",
+                            tint = Color.White,
+                            modifier = Modifier.size(15.dp)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            text = "محادثة فورية",
+                            color = Color.White,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 12.sp
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+

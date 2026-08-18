@@ -7,6 +7,9 @@ import com.example.data.ai.GeminiAiService
 import com.example.data.local.GeoConnectDatabase
 import com.example.data.location.LocationProvider
 import com.example.data.model.*
+import com.example.data.nearby.DiscoveredPeer
+import com.example.data.nearby.NearbyDiscoveryManager
+import com.example.data.nearby.PeerSource
 import com.example.data.repository.FirebaseAuthRepository
 import com.example.data.repository.FirestoreRepository
 import com.example.data.repository.GeoConnectRepository
@@ -37,6 +40,7 @@ class GeoConnectViewModel(application: Application) : AndroidViewModel(applicati
     private val repository = GeoConnectRepository(database)
     private val aiService = GeminiAiService()
     val locationProvider = LocationProvider(application)
+    val nearbyManager = NearbyDiscoveryManager(application)
     val firebaseAuthRepo = FirebaseAuthRepository(application)
     val firestoreRepo = FirestoreRepository()
 
@@ -46,6 +50,14 @@ class GeoConnectViewModel(application: Application) : AndroidViewModel(applicati
     val globalErrorNotice = MutableStateFlow<String?>(null)
     val locationErrorMessage = MutableStateFlow<String?>(null)
     val aiErrorMessage = MutableStateFlow<String?>(null)
+
+    // Nearby Hardware Discovery Streams (Bluetooth, Wi-Fi, GPS)
+    val discoveredPeers: StateFlow<List<DiscoveredPeer>> = nearbyManager.discoveredPeers
+    val isNearbyScanning: StateFlow<Boolean> = nearbyManager.isScanning
+    val bluetoothEnabled: StateFlow<Boolean> = nearbyManager.bluetoothEnabled
+    val wifiEnabled: StateFlow<Boolean> = nearbyManager.wifiEnabled
+    val selectedPeer = MutableStateFlow<DiscoveredPeer?>(null)
+    val peerSourceFilter = MutableStateFlow("all") // "all", "bluetooth", "wifi", "gps", "uninstalled"
 
     // Auth State
     private val _authStep = MutableStateFlow(AuthStep.AUTHENTICATED)
@@ -852,5 +864,30 @@ class GeoConnectViewModel(application: Application) : AndroidViewModel(applicati
                 // Keep current location on exception
             }
         }
+    }
+
+    // --- Hardware & Local Nearby Discovery (Bluetooth, Wi-Fi, GPS) ---
+    fun startNearbyDiscovery() {
+        nearbyManager.startActiveDiscovery(
+            centerLat = userLat.value,
+            centerLng = userLng.value,
+            communityUsers = activeUsers.value
+        )
+    }
+
+    fun stopNearbyDiscovery() {
+        nearbyManager.stopActiveDiscovery()
+    }
+
+    fun refreshNearbyDiscovery() {
+        nearbyManager.refreshMockAndHardwareScan(
+            centerLat = userLat.value,
+            centerLng = userLng.value,
+            communityUsers = activeUsers.value
+        )
+    }
+
+    fun invitePeerToDownload(peer: DiscoveredPeer, method: String = "share") {
+        nearbyManager.sendInvitation(peer, method)
     }
 }

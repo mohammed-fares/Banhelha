@@ -3,6 +3,7 @@ package com.example.ui.screens
 import android.Manifest
 import android.content.Intent
 import android.net.Uri
+import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
@@ -30,6 +31,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -37,10 +39,13 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
+import com.example.R
 import com.example.data.model.UserEntity
-import com.example.ui.components.RadarView
+import com.example.data.nearby.DiscoveredPeer
+import com.example.data.nearby.PeerSource
+import com.example.ui.components.DiscoveredPeerCard
+import com.example.ui.components.RadarPeerView
 import com.example.ui.components.TrustLevelBadge
-import com.example.ui.components.UserCard
 import com.example.ui.theme.*
 import com.example.viewmodel.GeoConnectViewModel
 
@@ -51,62 +56,81 @@ fun RadarDiscoveryScreen(
     onNavigateToChat: (UserEntity) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val activeUsers by viewModel.activeUsers.collectAsStateWithLifecycle()
+    val discoveredPeers by viewModel.discoveredPeers.collectAsStateWithLifecycle()
+    val isNearbyScanning by viewModel.isNearbyScanning.collectAsStateWithLifecycle()
+    val bluetoothEnabled by viewModel.bluetoothEnabled.collectAsStateWithLifecycle()
+    val wifiEnabled by viewModel.wifiEnabled.collectAsStateWithLifecycle()
+    val selectedPeer by viewModel.selectedPeer.collectAsStateWithLifecycle()
+    val peerSourceFilter by viewModel.peerSourceFilter.collectAsStateWithLifecycle()
     val allTrusts by viewModel.allTrusts.collectAsStateWithLifecycle()
+
     val userLat by viewModel.userLat.collectAsStateWithLifecycle()
     val userLng by viewModel.userLng.collectAsStateWithLifecycle()
     val distanceFilter by viewModel.distanceFilterKm.collectAsStateWithLifecycle()
-    val genderFilter by viewModel.genderFilter.collectAsStateWithLifecycle()
     val searchQuery by viewModel.searchQuery.collectAsStateWithLifecycle()
     val viewMode by viewModel.viewMode.collectAsStateWithLifecycle()
-    val selectedUser by viewModel.selectedUser.collectAsStateWithLifecycle()
-    val selectedUserTrust by viewModel.selectedUserTrust.collectAsStateWithLifecycle()
     val hasLocationPermission by viewModel.hasLocationPermission.collectAsStateWithLifecycle()
     val isFetchingLocation by viewModel.isFetchingLocation.collectAsStateWithLifecycle()
+
+    val permissionsToRequest = remember {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            arrayOf(
+                Manifest.permission.ACCESS_FINE_LOCATION,
+                Manifest.permission.ACCESS_COARSE_LOCATION,
+                Manifest.permission.BLUETOOTH_SCAN,
+                Manifest.permission.BLUETOOTH_CONNECT
+            )
+        } else {
+            arrayOf(
+                Manifest.permission.ACCESS_FINE_LOCATION,
+                Manifest.permission.ACCESS_COARSE_LOCATION,
+                Manifest.permission.BLUETOOTH,
+                Manifest.permission.BLUETOOTH_ADMIN
+            )
+        }
+    }
 
     val permissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestMultiplePermissions()
     ) { permissions ->
-        val granted = permissions[Manifest.permission.ACCESS_FINE_LOCATION] == true ||
+        val grantedLoc = permissions[Manifest.permission.ACCESS_FINE_LOCATION] == true ||
                 permissions[Manifest.permission.ACCESS_COARSE_LOCATION] == true
-        viewModel.onLocationPermissionResult(granted)
+        viewModel.onLocationPermissionResult(grantedLoc)
+        viewModel.startNearbyDiscovery()
     }
 
     LaunchedEffect(Unit) {
         if (!hasLocationPermission) {
-            permissionLauncher.launch(
-                arrayOf(
-                    Manifest.permission.ACCESS_FINE_LOCATION,
-                    Manifest.permission.ACCESS_COARSE_LOCATION
-                )
-            )
+            permissionLauncher.launch(permissionsToRequest)
         } else {
             viewModel.refreshLocationFromGps()
+            viewModel.startNearbyDiscovery()
         }
     }
 
-    // Filter users by distance, gender, and search text
-    val filteredUsers = remember(activeUsers, distanceFilter, genderFilter, searchQuery, userLat, userLng) {
-        activeUsers.filter { user ->
-            // Exclude self (id 56 or current)
-            val isNotSelf = user.id != 56L
-            val distanceMeters = viewModel.calculateDistanceMeters(userLat, userLng, user.latitude, user.longitude)
-            val distanceKm = distanceMeters / 1000.0
-            val withinDistance = distanceKm <= distanceFilter
-
-            val matchesGender = when (genderFilter) {
-                "male" -> user.gender == "male"
-                "female" -> user.gender == "female"
+    // Filter peers by source, distance, and search query
+    val filteredPeers = remember(discoveredPeers, peerSourceFilter, distanceFilter, searchQuery) {
+        discoveredPeers.filter { peer ->
+            // Source Filter
+            val matchesSource = when (peerSourceFilter) {
+                "bluetooth" -> peer.source == PeerSource.BLUETOOTH
+                "wifi" -> peer.source == PeerSource.WIFI
+                "gps" -> peer.source == PeerSource.GPS_COMMUNITY
+                "uninstalled" -> !peer.hasAppInstalled
                 else -> true
             }
 
+            // Distance filter
+            val withinDistance = (peer.distanceMeters / 1000.0) <= distanceFilter
+
+            // Search Filter
             val matchesSearch = if (searchQuery.isBlank()) true else {
-                user.name.contains(searchQuery, ignoreCase = true) ||
-                        user.interests.contains(searchQuery, ignoreCase = true) ||
-                        user.bio.contains(searchQuery, ignoreCase = true)
+                peer.name.contains(searchQuery, ignoreCase = true) ||
+                        peer.bioOrInfo.contains(searchQuery, ignoreCase = true) ||
+                        peer.macOrIdentifier.contains(searchQuery, ignoreCase = true)
             }
 
-            isNotSelf && withinDistance && matchesGender && matchesSearch
+            matchesSource && withinDistance && matchesSearch
         }
     }
 
@@ -120,18 +144,18 @@ fun RadarDiscoveryScreen(
                 .fillMaxSize()
                 .statusBarsPadding()
         ) {
-            // Top Bar
+            // Top App Bar with Hardware Status Badges
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                    .padding(horizontal = 16.dp, vertical = 6.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Column {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(
-                            text = "بنحليها",
+                            text = stringResource(R.string.app_name),
                             fontSize = 22.sp,
                             fontWeight = FontWeight.Black,
                             color = GeoDarkOnSurface
@@ -146,7 +170,7 @@ fun RadarDiscoveryScreen(
                     }
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(
-                            text = if (isFetchingLocation) "📍 جاري تحديد الموقع..." else "📍 موقعك المباشر: %.4f, %.4f".format(userLat, userLng),
+                            text = if (isFetchingLocation) "📍 جاري تحديد GPS..." else "📍 GPS: %.4f, %.4f".format(userLat, userLng),
                             fontSize = 11.sp,
                             color = GeoTealPrimary
                         )
@@ -155,13 +179,9 @@ fun RadarDiscoveryScreen(
                             onClick = {
                                 if (hasLocationPermission) {
                                     viewModel.refreshLocationFromGps()
+                                    viewModel.refreshNearbyDiscovery()
                                 } else {
-                                    permissionLauncher.launch(
-                                        arrayOf(
-                                            Manifest.permission.ACCESS_FINE_LOCATION,
-                                            Manifest.permission.ACCESS_COARSE_LOCATION
-                                        )
-                                    )
+                                    permissionLauncher.launch(permissionsToRequest)
                                 }
                             },
                             modifier = Modifier.size(20.dp)
@@ -213,65 +233,154 @@ fun RadarDiscoveryScreen(
                 }
             }
 
-            // Location Permission Rationale Banner (if permission not granted)
-            if (!hasLocationPermission) {
-                Surface(
-                    color = Color(0xFFEFF6FF),
-                    shape = RoundedCornerShape(12.dp),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFBFDBFE)),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 4.dp)
+            // Hardware Radio Status Strip (Bluetooth + Wi-Fi + GPS Scan Action)
+            Surface(
+                color = GeoDarkSurface,
+                shape = RoundedCornerShape(12.dp),
+                border = androidx.compose.foundation.BorderStroke(1.dp, GeoDarkOutline),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 2.dp)
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     Row(
-                        modifier = Modifier.padding(10.dp),
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.weight(1f)
+                        // Bluetooth Chip
+                        Surface(
+                            color = Color(0xFF2563EB).copy(alpha = 0.12f),
+                            shape = RoundedCornerShape(8.dp)
                         ) {
-                            Icon(
-                                Icons.Default.LocationOn,
-                                contentDescription = null,
-                                tint = GeoTealPrimary,
-                                modifier = Modifier.size(20.dp)
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text(
-                                text = "مطلوب إذن الموقع الجغرافي لحساب المسافات وتفعيل ميزات القرب",
-                                fontSize = 11.sp,
-                                color = Color(0xFF1E3A8A),
-                                lineHeight = 15.sp
-                            )
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp)
+                            ) {
+                                Icon(Icons.Default.Bluetooth, contentDescription = null, tint = Color(0xFF2563EB), modifier = Modifier.size(13.dp))
+                                Spacer(modifier = Modifier.width(3.dp))
+                                Text(text = "بلوتوث نشط", fontSize = 10.sp, color = Color(0xFF2563EB), fontWeight = FontWeight.Bold)
+                            }
                         }
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Button(
-                            onClick = {
-                                permissionLauncher.launch(
-                                    arrayOf(
-                                        Manifest.permission.ACCESS_FINE_LOCATION,
-                                        Manifest.permission.ACCESS_COARSE_LOCATION
-                                    )
-                                )
-                            },
-                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
-                            shape = RoundedCornerShape(8.dp),
-                            colors = ButtonDefaults.buttonColors(containerColor = GeoTealPrimary)
+
+                        // Wi-Fi Chip
+                        Surface(
+                            color = Color(0xFF10B981).copy(alpha = 0.12f),
+                            shape = RoundedCornerShape(8.dp)
                         ) {
-                            Text("منح الإذن", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp)
+                            ) {
+                                Icon(Icons.Default.Wifi, contentDescription = null, tint = Color(0xFF10B981), modifier = Modifier.size(13.dp))
+                                Spacer(modifier = Modifier.width(3.dp))
+                                Text(text = "واي فاي نشط", fontSize = 10.sp, color = Color(0xFF10B981), fontWeight = FontWeight.Bold)
+                            }
                         }
                     }
+
+                    // Scan Nearby Button
+                    Button(
+                        onClick = {
+                            viewModel.refreshNearbyDiscovery()
+                            viewModel.startNearbyDiscovery()
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = GeoTealPrimary),
+                        shape = RoundedCornerShape(8.dp),
+                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                        modifier = Modifier.height(28.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Sensors,
+                            contentDescription = "مسح المحيط",
+                            tint = Color.White,
+                            modifier = Modifier.size(13.dp)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("مسح الآن", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                    }
                 }
-                Spacer(modifier = Modifier.height(4.dp))
             }
 
-            // Compact Scaled Search Box
+            Spacer(modifier = Modifier.height(6.dp))
+
+            // Multi-Source Filter Chips
+            LazyRow(
+                contentPadding = PaddingValues(horizontal = 16.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                item {
+                    FilterChip(
+                        selected = peerSourceFilter == "all",
+                        onClick = { viewModel.peerSourceFilter.value = "all" },
+                        label = { Text("الكل (${discoveredPeers.size})", fontSize = 11.sp, fontWeight = FontWeight.Bold) },
+                        colors = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = GeoTealPrimary,
+                            selectedLabelColor = Color.White
+                        )
+                    )
+                }
+                item {
+                    FilterChip(
+                        selected = peerSourceFilter == "bluetooth",
+                        onClick = { viewModel.peerSourceFilter.value = "bluetooth" },
+                        leadingIcon = { Icon(Icons.Default.Bluetooth, contentDescription = null, modifier = Modifier.size(14.dp)) },
+                        label = { Text("بلوتوث (${discoveredPeers.count { it.source == PeerSource.BLUETOOTH }})", fontSize = 11.sp) },
+                        colors = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = Color(0xFF2563EB),
+                            selectedLabelColor = Color.White
+                        )
+                    )
+                }
+                item {
+                    FilterChip(
+                        selected = peerSourceFilter == "wifi",
+                        onClick = { viewModel.peerSourceFilter.value = "wifi" },
+                        leadingIcon = { Icon(Icons.Default.Wifi, contentDescription = null, modifier = Modifier.size(14.dp)) },
+                        label = { Text("واي فاي (${discoveredPeers.count { it.source == PeerSource.WIFI }})", fontSize = 11.sp) },
+                        colors = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = Color(0xFF10B981),
+                            selectedLabelColor = Color.White
+                        )
+                    )
+                }
+                item {
+                    FilterChip(
+                        selected = peerSourceFilter == "gps",
+                        onClick = { viewModel.peerSourceFilter.value = "gps" },
+                        leadingIcon = { Icon(Icons.Default.LocationOn, contentDescription = null, modifier = Modifier.size(14.dp)) },
+                        label = { Text("أعضاء بنحلها (${discoveredPeers.count { it.source == PeerSource.GPS_COMMUNITY }})", fontSize = 11.sp) },
+                        colors = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = GeoAzureSecondary,
+                            selectedLabelColor = Color.White
+                        )
+                    )
+                }
+                item {
+                    FilterChip(
+                        selected = peerSourceFilter == "uninstalled",
+                        onClick = { viewModel.peerSourceFilter.value = "uninstalled" },
+                        leadingIcon = { Icon(Icons.Default.Send, contentDescription = null, modifier = Modifier.size(14.dp)) },
+                        label = { Text("أجهزة للدعوة ✉️ (${discoveredPeers.count { !it.hasAppInstalled }})", fontSize = 11.sp) },
+                        colors = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = Color(0xFFE11D48),
+                            selectedLabelColor = Color.White
+                        )
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(6.dp))
+
+            // Search Box
             OutlinedTextField(
                 value = searchQuery,
                 onValueChange = { viewModel.searchQuery.value = it },
-                placeholder = { Text("بحث بالاسم أو الاهتمام...", fontSize = 12.sp, color = Color(0xFF74777F)) },
+                placeholder = { Text("بحث باسم الشخص، الجهاز، أو البث...", fontSize = 12.sp, color = Color(0xFF74777F)) },
                 leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, tint = GeoTealPrimary, modifier = Modifier.size(18.dp)) },
                 trailingIcon = {
                     if (searchQuery.isNotEmpty()) {
@@ -297,9 +406,9 @@ fun RadarDiscoveryScreen(
                     .testTag("radar_search_input")
             )
 
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(6.dp))
 
-            // Controllable Distance Slider (Left-Right interactive range control)
+            // Controllable Distance Slider
             Surface(
                 color = GeoDarkSurface,
                 shape = RoundedCornerShape(14.dp),
@@ -308,7 +417,7 @@ fun RadarDiscoveryScreen(
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp)
             ) {
-                Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
+                Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
@@ -335,7 +444,7 @@ fun RadarDiscoveryScreen(
                                 color = GeoTealPrimary,
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.Bold,
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
                             )
                         }
                     }
@@ -352,21 +461,12 @@ fun RadarDiscoveryScreen(
                         ),
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(28.dp)
+                            .height(26.dp)
                     )
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Text("0.5 كم (أقرب جار)", fontSize = 10.sp, color = Color(0xFF64748B))
-                        Text("10 كم", fontSize = 10.sp, color = Color(0xFF64748B))
-                        Text("50 كم (المدينة كاملة)", fontSize = 10.sp, color = Color(0xFF64748B))
-                    }
                 }
             }
 
-            Spacer(modifier = Modifier.height(6.dp))
+            Spacer(modifier = Modifier.height(4.dp))
 
             // Main Content: Radar or List
             AnimatedContent(
@@ -380,34 +480,32 @@ fun RadarDiscoveryScreen(
                     Column(
                         modifier = Modifier
                             .fillMaxSize()
-                            .padding(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(14.dp)
+                            .padding(horizontal = 16.dp, vertical = 6.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
-                        RadarView(
+                        RadarPeerView(
                             centerLat = userLat,
                             centerLng = userLng,
                             maxDistanceKm = distanceFilter,
-                            users = filteredUsers,
-                            selectedUser = selectedUser,
-                            onUserSelected = { user -> viewModel.selectedUser.value = user },
+                            peers = filteredPeers,
+                            selectedPeer = selectedPeer,
+                            onPeerSelected = { peer -> viewModel.selectedPeer.value = peer },
                             modifier = Modifier.weight(1f)
                         )
 
-                        // Highlighted bottom card if user tapped on radar
-                        if (selectedUser != null) {
-                            val targetTrust = allTrusts.firstOrNull { it.targetUserId == selectedUser!!.id }
-                            val distMeters = viewModel.calculateDistanceMeters(
-                                userLat, userLng, selectedUser!!.latitude, selectedUser!!.longitude
-                            )
-                            UserCard(
-                                user = selectedUser!!,
-                                distanceStr = viewModel.formatDistance(distMeters),
-                                trust = targetTrust,
+                        // Highlighted bottom card if peer tapped on radar
+                        if (selectedPeer != null) {
+                            DiscoveredPeerCard(
+                                peer = selectedPeer!!,
+                                distanceStr = if (selectedPeer!!.distanceMeters < 1000) "${selectedPeer!!.distanceMeters.toInt()} متر" else "%.1f كم".format(selectedPeer!!.distanceMeters / 1000.0),
                                 onCardClick = { /* open details */ },
-                                onPingClick = { viewModel.sendPing(selectedUser!!.id) },
+                                onInviteClick = { viewModel.invitePeerToDownload(selectedPeer!!, "share") },
                                 onChatClick = {
-                                    viewModel.openChatWith(selectedUser!!)
-                                    onNavigateToChat(selectedUser!!)
+                                    val u = selectedPeer!!.userEntity
+                                    if (u != null) {
+                                        viewModel.openChatWith(u)
+                                        onNavigateToChat(u)
+                                    }
                                 }
                             )
                         } else {
@@ -419,15 +517,16 @@ fun RadarDiscoveryScreen(
                                 modifier = Modifier.fillMaxWidth()
                             ) {
                                 Row(
-                                    modifier = Modifier.padding(12.dp),
+                                    modifier = Modifier.padding(10.dp),
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
                                     Icon(Icons.Default.TouchApp, contentDescription = null, tint = GeoAzureSecondary, modifier = Modifier.size(18.dp))
-                                    Spacer(modifier = Modifier.width(10.dp))
+                                    Spacer(modifier = Modifier.width(8.dp))
                                     Text(
-                                        text = "المس أي نقطة على الرادار لمعاينة الشخص والتواصل معه فوراً",
+                                        text = "المس أي نقطة على الرادار (🔵 بلوتوث، 📶 واي فاي، 📍 GPS) لمعاينته ودعوته أو محادثته",
                                         color = Color(0xFF49454F),
-                                        fontSize = 12.sp
+                                        fontSize = 11.sp,
+                                        lineHeight = 16.sp
                                     )
                                 }
                             }
@@ -435,7 +534,7 @@ fun RadarDiscoveryScreen(
                     }
                 } else {
                     // List View
-                    if (filteredUsers.isEmpty()) {
+                    if (filteredPeers.isEmpty()) {
                         Box(
                             modifier = Modifier
                                 .fillMaxSize()
@@ -443,33 +542,31 @@ fun RadarDiscoveryScreen(
                             contentAlignment = Alignment.Center
                         ) {
                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Icon(Icons.Default.LocationOff, contentDescription = null, tint = Color(0xFF94A3B8), modifier = Modifier.size(48.dp))
+                                Icon(Icons.Default.SensorsOff, contentDescription = null, tint = Color(0xFF94A3B8), modifier = Modifier.size(48.dp))
                                 Spacer(modifier = Modifier.height(12.dp))
-                                Text("لا يوجد أشخاص مطابقون في هذا النطاق", color = GeoDarkOnSurface, fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                                Text("لا توجد أجهزة أو أشخاص ضمن الفلتر المختار", color = GeoDarkOnSurface, fontWeight = FontWeight.Bold, fontSize = 15.sp)
                                 Spacer(modifier = Modifier.height(4.dp))
-                                Text("جرب زيادة نطاق المسافة إلى 25 كم أو تغيير كلمات البحث", color = Color(0xFF64748B), fontSize = 13.sp, textAlign = TextAlign.Center)
+                                Text("تأكد من تفعيل البلوتوث والواي فاي أو قم بتوسيع نطاق المسافة", color = Color(0xFF64748B), fontSize = 13.sp, textAlign = TextAlign.Center)
                             }
                         }
                     } else {
                         LazyColumn(
                             contentPadding = PaddingValues(16.dp),
-                            verticalArrangement = Arrangement.spacedBy(14.dp),
+                            verticalArrangement = Arrangement.spacedBy(12.dp),
                             modifier = Modifier.fillMaxSize()
                         ) {
-                            items(filteredUsers, key = { it.id }) { user ->
-                                val targetTrust = allTrusts.firstOrNull { it.targetUserId == user.id }
-                                val distMeters = viewModel.calculateDistanceMeters(
-                                    userLat, userLng, user.latitude, user.longitude
-                                )
-                                UserCard(
-                                    user = user,
-                                    distanceStr = viewModel.formatDistance(distMeters),
-                                    trust = targetTrust,
-                                    onCardClick = { viewModel.selectedUser.value = user },
-                                    onPingClick = { viewModel.sendPing(user.id) },
+                            items(filteredPeers, key = { it.id }) { peer ->
+                                DiscoveredPeerCard(
+                                    peer = peer,
+                                    distanceStr = if (peer.distanceMeters < 1000) "${peer.distanceMeters.toInt()} متر" else "%.1f كم".format(peer.distanceMeters / 1000.0),
+                                    onCardClick = { viewModel.selectedPeer.value = peer },
+                                    onInviteClick = { viewModel.invitePeerToDownload(peer, "share") },
                                     onChatClick = {
-                                        viewModel.openChatWith(user)
-                                        onNavigateToChat(user)
+                                        val u = peer.userEntity
+                                        if (u != null) {
+                                            viewModel.openChatWith(u)
+                                            onNavigateToChat(u)
+                                        }
                                     }
                                 )
                             }
@@ -479,15 +576,14 @@ fun RadarDiscoveryScreen(
             }
         }
 
-        // Detailed User Sheet Modal
-        if (selectedUser != null) {
-            val user = selectedUser!!
-            val trust = selectedUserTrust
-            val context = LocalContext.current
-            val distMeters = viewModel.calculateDistanceMeters(userLat, userLng, user.latitude, user.longitude)
+        // Modal Sheet for Discovered Peer Details & Invitation Sheet
+        if (selectedPeer != null) {
+            val peer = selectedPeer!!
+            val user = peer.userEntity
+            val targetTrust = allTrusts.firstOrNull { it.targetUserId == (user?.id ?: -1L) }
 
             ModalBottomSheet(
-                onDismissRequest = { viewModel.selectedUser.value = null },
+                onDismissRequest = { viewModel.selectedPeer.value = null },
                 containerColor = GeoDarkSurface,
                 dragHandle = { BottomSheetDefaults.DragHandle(color = GeoDarkOutline) }
             ) {
@@ -497,317 +593,166 @@ fun RadarDiscoveryScreen(
                         .padding(horizontal = 24.dp, vertical = 12.dp)
                         .verticalScroll(rememberScrollState())
                 ) {
-                    // Header with Avatar & Status
+                    // Header
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(16.dp)
                     ) {
-                        if (user.avatarUrl.isNotBlank()) {
-                            AsyncImage(
-                                model = user.avatarUrl,
-                                contentDescription = user.name,
-                                modifier = Modifier
-                                    .size(72.dp)
-                                    .clip(CircleShape)
-                                    .border(2.dp, GeoTealPrimary, CircleShape),
-                                contentScale = ContentScale.Crop
+                        val sourceColor = when (peer.source) {
+                            PeerSource.BLUETOOTH -> Color(0xFF2563EB)
+                            PeerSource.WIFI -> Color(0xFF10B981)
+                            PeerSource.GPS_COMMUNITY -> GeoTealPrimary
+                        }
+
+                        Box(
+                            modifier = Modifier
+                                .size(68.dp)
+                                .clip(RoundedCornerShape(20.dp))
+                                .background(sourceColor.copy(alpha = 0.15f))
+                                .border(2.dp, sourceColor, RoundedCornerShape(20.dp)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = when (peer.source) {
+                                    PeerSource.BLUETOOTH -> Icons.Default.Bluetooth
+                                    PeerSource.WIFI -> Icons.Default.Wifi
+                                    PeerSource.GPS_COMMUNITY -> Icons.Default.Person
+                                },
+                                contentDescription = peer.name,
+                                tint = sourceColor,
+                                modifier = Modifier.size(34.dp)
                             )
-                        } else {
-                            Box(
-                                modifier = Modifier
-                                    .size(72.dp)
-                                    .clip(CircleShape)
-                                    .background(if (user.isBot) GeoPurpleAI.copy(alpha = 0.15f) else GeoTealContainer),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text(
-                                    text = if (user.isBot) "🤖" else user.name.take(1),
-                                    color = if (user.isBot) GeoPurpleAI else GeoTealPrimary,
-                                    fontSize = 28.sp,
-                                    fontWeight = FontWeight.Bold
-                                )
-                            }
                         }
 
                         Column(modifier = Modifier.weight(1f)) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text(
-                                    text = "${user.name}, ${user.age}",
-                                    color = GeoDarkOnSurface,
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 18.sp
-                                )
-                                if (user.isVerified) {
-                                    Spacer(modifier = Modifier.width(4.dp))
-                                    Icon(Icons.Default.CheckCircle, contentDescription = "Verified", tint = GeoTealPrimary, modifier = Modifier.size(18.dp))
-                                }
-                            }
-
+                            Text(
+                                text = peer.name,
+                                color = GeoDarkOnSurface,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 18.sp
+                            )
                             Spacer(modifier = Modifier.height(2.dp))
                             Text(
-                                text = "📍 ${viewModel.formatDistance(distMeters)} away",
+                                text = "📍 على بعد ${if (peer.distanceMeters < 1000) "${peer.distanceMeters.toInt()} متر" else "%.1f كم".format(peer.distanceMeters / 1000.0)} • إشارة: ${peer.signalDbm} dBm",
                                 color = GeoAzureSecondary,
-                                fontSize = 13.sp,
+                                fontSize = 12.sp,
                                 fontWeight = FontWeight.SemiBold
                             )
-
                             Spacer(modifier = Modifier.height(4.dp))
-                            TrustLevelBadge(trust = trust)
+                            Surface(
+                                color = if (peer.hasAppInstalled) GeoTealContainer else Color(0xFFFFE4E6),
+                                shape = RoundedCornerShape(8.dp)
+                            ) {
+                                Text(
+                                    text = if (peer.hasAppInstalled) "عضو مسجل في بنحلها ✔" else "جهاز مكتشف مجاور (غير مثبت للتطبيق)",
+                                    color = if (peer.hasAppInstalled) GeoTealPrimary else Color(0xFFE11D48),
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                                )
+                            }
                         }
                     }
 
                     Spacer(modifier = Modifier.height(16.dp))
-                    Text(text = "About", color = Color(0xFF64748B), fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text(
-                        text = if (user.bio.isNotBlank()) user.bio else "No bio available.",
-                        color = GeoDarkOnSurface,
-                        fontSize = 14.sp,
-                        lineHeight = 20.sp
-                    )
 
-                    Spacer(modifier = Modifier.height(14.dp))
-                    Text(text = "Interests", color = Color(0xFF64748B), fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                    Spacer(modifier = Modifier.height(6.dp))
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        user.interests.split(",").forEach { item ->
-                            if (item.isNotBlank()) {
-                                Surface(
-                                    color = Color(0xFFF1F3F9),
-                                    shape = RoundedCornerShape(8.dp)
-                                ) {
-                                    Text(
-                                        text = "#${item.trim()}",
-                                        color = GeoTealPrimary,
-                                        fontSize = 12.sp,
-                                        fontWeight = FontWeight.Medium,
-                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
-                                    )
-                                }
-                            }
-                        }
-                    }
-
-                    // Trust Relationship Progression Section
-                    Spacer(modifier = Modifier.height(18.dp))
-                    Text(
-                        text = "نظام الثقة والخصوصية المتقدم (Trust System)",
-                        color = GeoAzureSecondary,
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-
+                    // Hardware Details Box
                     Surface(
-                        color = Color(0xFFF8F9FE),
-                        shape = RoundedCornerShape(16.dp),
+                        color = Color(0xFFF8FAFC),
+                        shape = RoundedCornerShape(12.dp),
                         border = androidx.compose.foundation.BorderStroke(1.dp, GeoDarkOutline),
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        Column(modifier = Modifier.padding(14.dp)) {
-                            // Step 1: Ping / Connection
-                            val pingAccepted = trust?.pingStatus == "accepted"
-                            val pingSent = trust?.pingStatus == "sent"
-
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(
-                                        text = "1. إشارة التواصل (Ping & Connection)",
-                                        color = if (pingAccepted) GeoTealPrimary else GeoDarkOnSurface,
-                                        fontWeight = FontWeight.Bold,
-                                        fontSize = 13.sp
-                                    )
-                                    Text(
-                                        text = if (pingAccepted) "تم قبول الاتصال المتبادل ✅" else if (pingSent) "تم إرسال الإشارة بانتظار القبول..." else "إرسال إشارة للبدء في بناء الثقة",
-                                        color = Color(0xFF64748B),
-                                        fontSize = 11.sp
-                                    )
-                                }
-
-                                if (!pingAccepted) {
-                                    Button(
-                                        onClick = { viewModel.sendPing(user.id) },
-                                        enabled = !pingSent,
-                                        colors = ButtonDefaults.buttonColors(containerColor = GeoTealPrimary),
-                                        shape = RoundedCornerShape(8.dp),
-                                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
-                                        modifier = Modifier.height(32.dp)
-                                    ) {
-                                        Text(if (pingSent) "Sent" else "Send Ping", color = GeoTealOnPrimary, fontSize = 11.sp)
-                                    }
-                                }
+                        Column(modifier = Modifier.padding(12.dp)) {
+                            Text(text = "بيانات الاكتشاف والاتصال:", fontWeight = FontWeight.Bold, fontSize = 12.sp, color = GeoDarkOnSurface)
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(text = "• المصدر: ${if (peer.source == PeerSource.BLUETOOTH) "بث البلوتوث المفتوح (BLE Broadcast)" else if (peer.source == PeerSource.WIFI) "الشبكة المحلية / نقطة واي فاي" else "مشاركة الموقع الجغرافي الحي GPS"}", fontSize = 11.sp, color = Color(0xFF475569))
+                            if (peer.macOrIdentifier.isNotBlank()) {
+                                Text(text = "• العنوان / المعرف: ${peer.macOrIdentifier}", fontSize = 11.sp, color = Color(0xFF475569))
                             }
-
-                            Divider(color = GeoDarkOutline, modifier = Modifier.padding(vertical = 10.dp))
-
-                            // Step 2: Media Access
-                            val mediaGranted = trust?.mediaAccessGranted == true
-                            val mediaRequested = trust?.mediaAccessRequested == true
-
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(
-                                        text = "2. صلاحية مشاركة الصور والوسائط",
-                                        color = if (mediaGranted) GeoAzureSecondary else GeoDarkOnSurface,
-                                        fontWeight = FontWeight.Bold,
-                                        fontSize = 13.sp
-                                    )
-                                    Text(
-                                        text = if (mediaGranted) "الصلاحية مفعلة لتبادل الصور 📷" else if (mediaRequested) "تم طلب الإذن بانتظار الموافقة..." else "طلب إذن متبادل لتبادل الصور والوسائط",
-                                        color = Color(0xFF64748B),
-                                        fontSize = 11.sp
-                                    )
-                                }
-
-                                if (!mediaGranted) {
-                                    OutlinedButton(
-                                        onClick = { viewModel.requestMediaAccess(user.id) },
-                                        enabled = !mediaRequested,
-                                        colors = ButtonDefaults.outlinedButtonColors(contentColor = GeoAzureSecondary),
-                                        border = ButtonDefaults.outlinedButtonBorder.copy(
-                                            brush = Brush.linearGradient(listOf(GeoDarkOutline, GeoDarkOutline))
-                                        ),
-                                        shape = RoundedCornerShape(8.dp),
-                                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
-                                        modifier = Modifier.height(32.dp)
-                                    ) {
-                                        Text(if (mediaRequested) "Requested" else "Request", fontSize = 11.sp)
-                                    }
-                                }
-                            }
-
-                            Divider(color = GeoDarkOutline, modifier = Modifier.padding(vertical = 10.dp))
-
-                            // Step 3: Identity & Social Links Access
-                            val identityGranted = trust?.identityAccessGranted == true
-                            val identityRequested = trust?.identityAccessRequested == true
-
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(
-                                        text = "3. كشف الهوية وروابط التواصل (Identity)",
-                                        color = if (identityGranted) GeoGold else GeoDarkOnSurface,
-                                        fontWeight = FontWeight.Bold,
-                                        fontSize = 13.sp
-                                    )
-                                    Text(
-                                        text = if (identityGranted) "تم التحقق وكشف روابط التواصل ✅" else if (identityRequested) "تم إرسال طلب كشف الهوية..." else "مشاركة حسابات واتساب وتلغرام بعد الموافقة",
-                                        color = Color(0xFF64748B),
-                                        fontSize = 11.sp
-                                    )
-                                }
-
-                                if (!identityGranted) {
-                                    OutlinedButton(
-                                        onClick = { viewModel.requestIdentityAccess(user.id) },
-                                        enabled = !identityRequested,
-                                        colors = ButtonDefaults.outlinedButtonColors(contentColor = GeoGold),
-                                        border = ButtonDefaults.outlinedButtonBorder.copy(
-                                            brush = Brush.linearGradient(listOf(GeoDarkOutline, GeoDarkOutline))
-                                        ),
-                                        shape = RoundedCornerShape(8.dp),
-                                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
-                                        modifier = Modifier.height(32.dp)
-                                    ) {
-                                        Text(if (identityRequested) "Pending" else "Request ID", fontSize = 11.sp)
-                                    }
-                                }
-                            }
-
-                            // If Identity is granted, reveal direct social links
-                            if (identityGranted) {
-                                Spacer(modifier = Modifier.height(10.dp))
-                                Surface(
-                                    color = Color(0xFFFEF3C7),
-                                    shape = RoundedCornerShape(10.dp),
-                                    modifier = Modifier.fillMaxWidth()
-                                ) {
-                                    Column(modifier = Modifier.padding(10.dp)) {
-                                        Text("روابط التواصل الموثوقة المفتوحة:", color = GeoGold, fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                                        Spacer(modifier = Modifier.height(6.dp))
-                                        if (user.whatsapp.isNotBlank()) {
-                                            Row(
-                                                modifier = Modifier
-                                                    .fillMaxWidth()
-                                                    .clickable {
-                                                        val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://wa.me/${user.whatsapp.replace("+", "")}"))
-                                                        context.startActivity(intent)
-                                                    }
-                                                    .padding(vertical = 4.dp),
-                                                verticalAlignment = Alignment.CenterVertically
-                                            ) {
-                                                Icon(Icons.Default.Phone, contentDescription = null, tint = GeoGreenOnline, modifier = Modifier.size(14.dp))
-                                                Spacer(modifier = Modifier.width(6.dp))
-                                                Text("WhatsApp: ${user.whatsapp}", color = GeoDarkOnSurface, fontSize = 12.sp)
-                                            }
-                                        }
-                                        if (user.telegram.isNotBlank()) {
-                                            Row(
-                                                modifier = Modifier.padding(vertical = 4.dp),
-                                                verticalAlignment = Alignment.CenterVertically
-                                            ) {
-                                                Icon(Icons.Default.Send, contentDescription = null, tint = GeoAzureSecondary, modifier = Modifier.size(14.dp))
-                                                Spacer(modifier = Modifier.width(6.dp))
-                                                Text("Telegram: ${user.telegram}", color = GeoDarkOnSurface, fontSize = 12.sp)
-                                            }
-                                        }
-                                    }
-                                }
+                            if (peer.bioOrInfo.isNotBlank()) {
+                                Text(text = "• ملاحظات: ${peer.bioOrInfo}", fontSize = 11.sp, color = Color(0xFF475569))
                             }
                         }
                     }
 
-                    // Main Action Buttons
-                    Spacer(modifier = Modifier.height(20.dp))
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    // Actions
+                    if (!peer.hasAppInstalled) {
+                        Text(
+                            text = "إرسال دعوة للانضمام إلى بنحلها:",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 13.sp,
+                            color = GeoDarkOnSurface
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+
                         Button(
-                            onClick = {
-                                viewModel.openChatWith(user)
-                                viewModel.selectedUser.value = null
-                                onNavigateToChat(user)
-                            },
-                            modifier = Modifier
-                                .weight(1f)
-                                .height(48.dp),
+                            onClick = { viewModel.invitePeerToDownload(peer, "whatsapp") },
+                            modifier = Modifier.fillMaxWidth(),
                             shape = RoundedCornerShape(12.dp),
-                            colors = ButtonDefaults.buttonColors(containerColor = GeoTealPrimary)
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF25D366))
                         ) {
-                            Icon(Icons.Default.Chat, contentDescription = null, tint = GeoTealOnPrimary)
+                            Icon(Icons.Default.Chat, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
                             Spacer(modifier = Modifier.width(8.dp))
-                            Text("فتح المحادثة 💬", color = GeoTealOnPrimary, fontWeight = FontWeight.Bold)
+                            Text("دعوة عبر واتساب (WhatsApp)", fontWeight = FontWeight.Bold, color = Color.White)
                         }
 
-                        // Report / Block action
-                        OutlinedButton(
-                            onClick = {
-                                viewModel.showReportDialog.value = user
-                            },
-                            modifier = Modifier.height(48.dp),
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        Button(
+                            onClick = { viewModel.invitePeerToDownload(peer, "sms") },
+                            modifier = Modifier.fillMaxWidth(),
                             shape = RoundedCornerShape(12.dp),
-                            colors = ButtonDefaults.outlinedButtonColors(contentColor = GeoRedError),
-                            border = ButtonDefaults.outlinedButtonBorder.copy(
-                                brush = Brush.linearGradient(listOf(GeoDarkOutline, GeoDarkOutline))
-                            )
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF3B82F6))
                         ) {
-                            Icon(Icons.Default.Shield, contentDescription = "Safety", tint = GeoRedError)
+                            Icon(Icons.Default.Sms, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("دعوة عبر رسالة نصية SMS", fontWeight = FontWeight.Bold, color = Color.White)
+                        }
+
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        OutlinedButton(
+                            onClick = { viewModel.invitePeerToDownload(peer, "share") },
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            Icon(Icons.Default.Share, contentDescription = null, tint = GeoTealPrimary, modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("مشاركة رابط التحميل عبر التطبيقات الأخرى", fontWeight = FontWeight.Bold, color = GeoTealPrimary)
+                        }
+                    } else if (user != null) {
+                        // Community user actions
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            OutlinedButton(
+                                onClick = { viewModel.sendPing(user.id) },
+                                modifier = Modifier.weight(1f),
+                                shape = RoundedCornerShape(12.dp)
+                            ) {
+                                Icon(Icons.Default.Favorite, contentDescription = null, tint = GeoTealPrimary, modifier = Modifier.size(18.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("إرسال Ping", fontWeight = FontWeight.Bold)
+                            }
+
+                            Button(
+                                onClick = {
+                                    viewModel.openChatWith(user)
+                                    viewModel.selectedPeer.value = null
+                                    onNavigateToChat(user)
+                                },
+                                modifier = Modifier.weight(1.2f),
+                                shape = RoundedCornerShape(12.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = GeoTealPrimary)
+                            ) {
+                                Icon(Icons.Default.Chat, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("بدء محادثة فورية", color = Color.White, fontWeight = FontWeight.Bold)
+                            }
                         }
                     }
 

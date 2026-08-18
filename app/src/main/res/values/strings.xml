@@ -96,6 +96,26 @@
     <string name="cancel_button">إلغاء</string>
     <string name="back_to_plans">رجوع للباقات</string>
 
+    <!-- Nearby Hardware Discovery (Bluetooth, Wi-Fi, GPS) -->
+    <string name="discovery_source_all">الكل 🌐</string>
+    <string name="discovery_source_bluetooth">بلوتوث 🔵</string>
+    <string name="discovery_source_wifi">واي فاي 📶</string>
+    <string name="discovery_source_gps">أعضاء بنحلها 📍</string>
+    <string name="discovery_source_uninstalled">أجهزة للدعوة ✉️</string>
+    <string name="scan_nearby_button">مسح البلوتوث والواي فاي المباشر</string>
+    <string name="scanning_nearby_status">جاري رصد إشارات البلوتوث والواي فاي القريبة...</string>
+    <string name="discovered_devices_count">%1$d جهاز وشخص مكتشف حولك</string>
+    <string name="invite_to_download_app">إرسال دعوة لتنزيل بنحلها والتواصل</string>
+    <string name="invite_via_whatsapp">دعوة عبر واتساب 💬</string>
+    <string name="invite_via_sms">دعوة عبر رسالة SMS 📱</string>
+    <string name="invite_share_link">مشاركة رابط الدعوة 🔗</string>
+    <string name="device_not_installed">غير مثبت للتطبيق (مكتشف عبر %1$s)</string>
+    <string name="signal_strength_label">قوة الإشارة: %1$d dBm</string>
+    <string name="device_mac_label">المعرف / العنوان: %1$s</string>
+    <string name="bluetooth_active_badge">بلوتوث 🔵</string>
+    <string name="wifi_active_badge">واي فاي 📶</string>
+    <string name="gps_active_badge">عضو بالمنصة 📍</string>
+
     <!-- Profile Screen -->
     <string name="profile_settings_title">الملف الشخصي والإعدادات</string>
     <string name="dashboard_button">لوحة المدير العام</string>
