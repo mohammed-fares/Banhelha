@@ -1,0 +1,105 @@
+<resources>
+    <string name="app_name">Banhelha</string>
+    <string name="app_title">Banhelha</string>
+    <string name="tagline">Local geo-community, store discovery &amp; nearby services platform</string>
+    
+    <!-- Navigation Tabs -->
+    <string name="tab_radar">Radar</string>
+    <string name="tab_map">Map</string>
+    <string name="tab_services">Shops &amp; Services</string>
+    <string name="tab_chats">Chats</string>
+    <string name="tab_profile">My Profile</string>
+    <string name="tab_dashboard">Dashboard</string>
+
+    <!-- Roles & Status -->
+    <string name="role_general_manager">General Manager</string>
+    <string name="role_store_owner">Store Owner</string>
+    <string name="role_member">Member</string>
+    <string name="role_current">Current Role:</string>
+    <string name="switch_role">Switch Role for Testing</string>
+    <string name="dashboard_access_manager_only">General Manager Access Only</string>
+    <string name="manager_badge">General Manager</string>
+
+    <!-- Radar Screen -->
+    <string name="radar_title">Banhelha</string>
+    <string name="live_gps_loc">Live GPS: %1$.4f, %2$.4f</string>
+    <string name="locating_gps">Locating GPS position...</string>
+    <string name="radar_radius_control">Radar Radius Range:</string>
+    <string name="radar_search_hint">Search by name or interest...</string>
+    <string name="radar_km_suffix">%1$.1f km</string>
+    <string name="radar_nearest_neighbor">0.5 km (Immediate)</string>
+    <string name="radar_mid_range">10 km</string>
+    <string name="radar_full_city">50 km (Full City/Governorate)</string>
+    <string name="nearby_people_count">%1$d people in radar range</string>
+    <string name="no_users_found">No people currently discovered in this range</string>
+    <string name="expand_radius_hint">Expand radar slider radius to discover more people around you</string>
+    <string name="permission_location_needed">The app requires location permission to discover nearby people and local stores.</string>
+    <string name="grant_permission">Grant Permission</string>
+
+    <!-- Services & Shops -->
+    <string name="services_title">Local Stores &amp; Services Directory</string>
+    <string name="services_subtitle">Verified shops, bakeries, technicians &amp; clinics in Egypt</string>
+    <string name="import_google_maps">Import from Google</string>
+    <string name="services_search_hint">Search store or service (bakery, tech, pharmacy)...</string>
+    <string name="add_store_service">Add Store / Service</string>
+    <string name="call_button">Call</string>
+    <string name="chat_button">Chat</string>
+    <string name="google_maps_button">Google Maps</string>
+    <string name="store_manager_prefix">Manager: %1$s</string>
+    <string name="no_services_found">No stores or services found in this category</string>
+    <string name="import_google_maps_prompt">You can import verified local stores directly from Google Maps!</string>
+    <string name="import_now_button">Import Google Maps Data Now</string>
+
+    <!-- Categories -->
+    <string name="cat_all">All 🌐</string>
+    <string name="cat_sweets">Sweets &amp; Bakeries 🍰</string>
+    <string name="cat_food">Food &amp; Cafés ☕</string>
+    <string name="cat_groceries">Supermarkets &amp; Groceries 🛒</string>
+    <string name="cat_tech">Technicians &amp; Maintenance ⚡</string>
+    <string name="cat_transport">Delivery &amp; Rides 🚕</string>
+    <string name="cat_health">Pharmacies &amp; Clinics 🏥</string>
+    <string name="cat_shops">Shops &amp; Fashion 🛍️</string>
+    <string name="cat_crafts">Workshops &amp; Crafts 🔨</string>
+
+    <!-- Subscriptions & Egyptian Payments -->
+    <string name="subscription_plans_title">Banhelha Subscription Plans</string>
+    <string name="choose_egypt_payment_title">Select Payment Gateway (Egypt)</string>
+    <string name="plan_free_name">Free Plan</string>
+    <string name="plan_free_price">0 EGP / month</string>
+    <string name="plan_free_desc">• Local radar up to 10 km\n• Connect with nearby people &amp; discover stores\n• Standard profile</string>
+    <string name="plan_premium_name">Silver Plus (Premium)</string>
+    <string name="plan_premium_price">99 EGP / month</string>
+    <string name="plan_premium_desc">• Extended radar up to 50 km (full governorate)\n• Verified account badge ✔\n• Unlimited ping &amp; activity alerts</string>
+    <string name="plan_business_name">Business Pro &amp; Partners</string>
+    <string name="plan_business_price">249 EGP / month</string>
+    <string name="plan_business_desc">• Unlimited local store &amp; service listings\n• Gold store badge &amp; Google Maps integration\n• Top ranking on search &amp; radar discovery</string>
+    <string name="total_required_amount">Total Amount: %1$d EGP / month</string>
+    <string name="available_egypt_gateways">Supported Egypt Payment Methods:</string>
+
+    <!-- Egyptian Payment Gateways -->
+    <string name="payment_fawry">Fawry Pay 🟡</string>
+    <string name="payment_vodafone_cash">Vodafone Cash 🔴</string>
+    <string name="payment_instapay">InstaPay Egypt (IPN) ⚡</string>
+    <string name="payment_orange_cash">Orange Cash 🟠</string>
+    <string name="payment_etisalat_cash">Etisalat Cash 🟢</string>
+    <string name="payment_we_pay">WE Pay 🟣</string>
+    <string name="payment_meeza_card">Meeza / Visa / Bank Card 💳</string>
+
+    <!-- Fawry Details -->
+    <string name="fawry_ref_code_label">Fawry Reference Payment Code:</string>
+    <string name="fawry_instructions">Visit any Fawry kiosk/merchant or use the MyFawry app. Pay using service code 788 and the reference code above before expiration (valid for 48 hours).</string>
+    <string name="wallet_or_phone_input_label">Wallet Number / Phone / IPN Address</string>
+    <string name="wallet_phone_placeholder">010XXXXXXXX, 011XXXXXXXX or username@instapay</string>
+    <string name="confirm_free_plan">Confirm Free Plan</string>
+    <string name="proceed_egypt_payment">Proceed to Egyptian Checkout</string>
+    <string name="confirm_and_pay">Confirm &amp; Pay Subscription</string>
+    <string name="cancel_button">Cancel</string>
+    <string name="back_to_plans">Back to Plans</string>
+
+    <!-- Profile Screen -->
+    <string name="profile_settings_title">Profile &amp; Settings</string>
+    <string name="dashboard_button">General Manager Dashboard</string>
+    <string name="upgrade_subscription">Upgrade &amp; Renew Subscription</string>
+    <string name="current_plan_label">Current Plan:</string>
+    <string name="sign_out">Sign Out</string>
+</resources>

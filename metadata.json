@@ -1,0 +1,6 @@
+{
+  "name": "بنحلها",
+  "description": "منصة بنحلها الاجتماعية والجغرافية لربط الأشخاص والمتاجر والخدمات المحلية القريبة",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

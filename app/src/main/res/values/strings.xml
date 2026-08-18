@@ -1,0 +1,105 @@
+<resources>
+    <string name="app_name">بنحلها</string>
+    <string name="app_title">بنحلها</string>
+    <string name="tagline">منصة التواصل والاستكشاف الجغرافي والخدمات المحلية</string>
+    
+    <!-- Navigation Tabs -->
+    <string name="tab_radar">الرادار</string>
+    <string name="tab_map">الخريطة</string>
+    <string name="tab_services">المتاجر والخدمات</string>
+    <string name="tab_chats">المحادثات</string>
+    <string name="tab_profile">حسابي</string>
+    <string name="tab_dashboard">لوحة التحكم</string>
+
+    <!-- Roles & Status -->
+    <string name="role_general_manager">المدير العام (General Manager)</string>
+    <string name="role_store_owner">صاحب متجر (Store Owner)</string>
+    <string name="role_member">عضو (Member)</string>
+    <string name="role_current">الصفة الحالية:</string>
+    <string name="switch_role">تبديل الصفة للاختبار</string>
+    <string name="dashboard_access_manager_only">متاح للمدير العام فقط</string>
+    <string name="manager_badge">إدارة عامة</string>
+
+    <!-- Radar Screen -->
+    <string name="radar_title">بنحلها</string>
+    <string name="live_gps_loc">موقعك المباشر: %1$.4f, %2$.4f</string>
+    <string name="locating_gps">جاري تحديد الموقع...</string>
+    <string name="radar_radius_control">مؤشر نطاق الرادار:</string>
+    <string name="radar_search_hint">بحث بالاسم أو الاهتمام...</string>
+    <string name="radar_km_suffix">%1$.1f كم</string>
+    <string name="radar_nearest_neighbor">0.5 كم (المحيط الفوري)</string>
+    <string name="radar_mid_range">10 كم</string>
+    <string name="radar_full_city">50 كم (كامل المحافظة)</string>
+    <string name="nearby_people_count">%1$d شخص في نطاق الرادار</string>
+    <string name="no_users_found">لا يوجد أشخاص حالياً ضمن هذا النطاق</string>
+    <string name="expand_radius_hint">قم بزيادة نطاق الرادار للعثور على مزيد من الأشخاص</string>
+    <string name="permission_location_needed">يتطلب التطبيق إذن الموقع الجغرافي لعرض الأشخاص والمتاجر القريبة منك.</string>
+    <string name="grant_permission">منح الإذن</string>
+
+    <!-- Services & Shops -->
+    <string name="services_title">دليل المتاجر والخدمات المحلية</string>
+    <string name="services_subtitle">محلات، مخابز، فنيين، وعيادات موثقة في مصر</string>
+    <string name="import_google_maps">استيراد من Google</string>
+    <string name="services_search_hint">بحث عن متجر أو خدمة (حلواني، صيانة، صيدلية)...</string>
+    <string name="add_store_service">إضافة متجر / خدمة</string>
+    <string name="call_button">اتصال</string>
+    <string name="chat_button">محادثة</string>
+    <string name="google_maps_button">خريطة Google</string>
+    <string name="store_manager_prefix">المسؤول: %1$s</string>
+    <string name="no_services_found">لا توجد متاجر أو خدمات في هذا التصنيف</string>
+    <string name="import_google_maps_prompt">يمكنك استيراد متاجر ومحلات مباشرة من Google Maps!</string>
+    <string name="import_now_button">استيراد بيانات Google Maps الآن</string>
+
+    <!-- Categories -->
+    <string name="cat_all">الكل 🌐</string>
+    <string name="cat_sweets">حلويات ومخابز 🍰</string>
+    <string name="cat_food">مطاعم وكافيهات ☕</string>
+    <string name="cat_groceries">سوبرماركت وبقالة 🛒</string>
+    <string name="cat_tech">فنيين وصيانة ⚡</string>
+    <string name="cat_transport">توصيل ومواصلات 🚕</string>
+    <string name="cat_health">صيدليات وعيادات 🏥</string>
+    <string name="cat_shops">متاجر وأزياء 🛍️</string>
+    <string name="cat_crafts">ورش وحرف 🔨</string>
+
+    <!-- Subscriptions & Egyptian Payments -->
+    <string name="subscription_plans_title">باقات واشتراكات بنحلها</string>
+    <string name="choose_egypt_payment_title">اختر طريقة الدفع (مصر)</string>
+    <string name="plan_free_name">الباقة المجانية (Free)</string>
+    <string name="plan_free_price">0 ج.م / شهرياً</string>
+    <string name="plan_free_desc">• رادار محلي حتى 10 كم\n• تواصل واستكشاف المتاجر القريبة\n• ملف شخصي أساسي</string>
+    <string name="plan_premium_name">باقة بلس الفضية (Premium)</string>
+    <string name="plan_premium_price">99 ج.م / شهرياً</string>
+    <string name="plan_premium_desc">• رادار موسع حتى 50 كم بكامل المحافظة\n• شارة الحساب الموثق ✔\n• إرسال تنبيهات وPing غير محدود للأنشطة</string>
+    <string name="plan_business_name">باقة الأعمال والمحلات (Business Pro)</string>
+    <string name="plan_business_price">249 ج.م / شهرياً</string>
+    <string name="plan_business_desc">• إدراج عدد غير محدود من الخدمات والمتاجر\n• شارة المتجر الذهبي وتكامل مع Google Maps\n• ظهور في الترتيب الأول لنتائج البحث والرادار</string>
+    <string name="total_required_amount">المبلغ المطلوب: %1$d ج.م / شهرياً</string>
+    <string name="available_egypt_gateways">طرق الدفع المعتمدة في مصر:</string>
+
+    <!-- Egyptian Payment Gateways -->
+    <string name="payment_fawry">خدمة فوري (Fawry Pay) 🟡</string>
+    <string name="payment_vodafone_cash">فودافون كاش (Vodafone Cash) 🔴</string>
+    <string name="payment_instapay">إنستاباي مصر (InstaPay IPN) ⚡</string>
+    <string name="payment_orange_cash">أورنج كاش (Orange Cash) 🟠</string>
+    <string name="payment_etisalat_cash">اتصالات كاش (Etisalat Cash) 🟢</string>
+    <string name="payment_we_pay">وي باي (WE Pay) 🟣</string>
+    <string name="payment_meeza_card">بطاقات ميزة والبنك (Meeza / Visa) 💳</string>
+
+    <!-- Fawry Details -->
+    <string name="fawry_ref_code_label">كود دفع فوري المرجعي:</string>
+    <string name="fawry_instructions">توجه لأي منفذ أو كشك فوري أو استخدم تطبيق MyFawry وادفع برقم الخدمة 788 والكود أعلاه قبل انتهاء المهلة (صالحة لمدة 48 ساعة).</string>
+    <string name="wallet_or_phone_input_label">رقم المحفظة / هاتف العميل / معرف الدفع</string>
+    <string name="wallet_phone_placeholder">010XXXXXXXX أو 011XXXXXXXX أو username@instapay</string>
+    <string name="confirm_free_plan">تأكيد الباقة المجانية</string>
+    <string name="proceed_egypt_payment">متابعة للدفع المصري</string>
+    <string name="confirm_and_pay">تأكيد ودفع الاشتراك</string>
+    <string name="cancel_button">إلغاء</string>
+    <string name="back_to_plans">رجوع للباقات</string>
+
+    <!-- Profile Screen -->
+    <string name="profile_settings_title">الملف الشخصي والإعدادات</string>
+    <string name="dashboard_button">لوحة المدير العام</string>
+    <string name="upgrade_subscription">ترقية وتجديد الباقة</string>
+    <string name="current_plan_label">الباقة الحالية:</string>
+    <string name="sign_out">تسجيل الخروج</string>
+</resources>
