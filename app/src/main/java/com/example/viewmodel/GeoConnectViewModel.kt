@@ -101,6 +101,13 @@ class GeoConnectViewModel(application: Application) : AndroidViewModel(applicati
     val allReports: StateFlow<List<ReportEntity>> = repository.allReports
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
+    val allOrders: StateFlow<List<ServiceOrderEntity>> = _currentUser
+        .flatMapLatest { user ->
+            if (user != null) repository.getOrdersForUser(user.id)
+            else repository.allOrders
+        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+
     val allAdminUsers: StateFlow<List<UserEntity>> = repository.allUsersAdmin
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
@@ -699,6 +706,83 @@ class GeoConnectViewModel(application: Application) : AndroidViewModel(applicati
             repository.insertService(service)
         }
     }
+
+    // --- Service & Gift Ordering System ---
+    fun placeServiceOrder(
+        service: LocalServiceEntity,
+        orderItems: String,
+        price: Double,
+        paymentGateway: String,
+        isGift: Boolean,
+        recipientUser: UserEntity?,
+        recipientName: String,
+        recipientPhone: String,
+        deliveryAddress: String,
+        giftGreeting: String
+    ) {
+        val current = _currentUser.value ?: return
+        viewModelScope.launch {
+            isGlobalLoading.value = true
+            globalLoadingMessage.value = "جاري تأكيد الدفع وإصدار الفاتورة..."
+
+            val paymentRef = "PAY-${(100000..999999).random()}"
+            val order = ServiceOrderEntity(
+                serviceId = service.id,
+                serviceTitle = service.title,
+                providerName = service.providerName,
+                senderUserId = current.id,
+                senderName = current.name,
+                recipientUserId = if (isGift) recipientUser?.id else null,
+                recipientName = if (isGift) (recipientUser?.name ?: recipientName) else current.name,
+                recipientPhone = if (isGift) (recipientUser?.phone ?: recipientPhone) else current.phone,
+                deliveryAddress = deliveryAddress.ifBlank { "العنوان بالقرب من ${service.address}" },
+                giftGreeting = giftGreeting,
+                orderItems = orderItems,
+                orderPrice = price,
+                paymentGateway = paymentGateway,
+                paymentStatus = "paid",
+                paymentReference = paymentRef,
+                orderStatus = "preparing",
+                isGift = isGift,
+                createdAt = System.currentTimeMillis()
+            )
+
+            val orderId = repository.insertOrder(order)
+
+            // If it's a gift to another user, automatically send a rich gift card into the chat
+            if (isGift && recipientUser != null) {
+                val giftChatText = "🎁 هدية خاصة من ${current.name}!\n" +
+                        "الطلب: $orderItems\n" +
+                        "المتجر: ${service.title}\n" +
+                        (if (giftGreeting.isNotBlank()) "الإهداء: \"$giftGreeting\"\n" else "") +
+                        "الحالة: تم الدفع بالكامل من قبل المرسل ✔ وجاري التجهيز والتوصيل 🚚"
+
+                repository.sendMessage(
+                    ChatMessageEntity(
+                        senderId = current.id,
+                        receiverId = recipientUser.id,
+                        message = giftChatText,
+                        mediaUrl = "order:$orderId",
+                        messageType = "gift_order",
+                        isRead = false,
+                        timestamp = System.currentTimeMillis()
+                    )
+                )
+            }
+
+            delay(800)
+            isGlobalLoading.value = false
+
+            // Progression simulation
+            viewModelScope.launch {
+                delay(12000)
+                repository.updateOrderStatus(orderId, "out_for_delivery")
+                delay(18000)
+                repository.updateOrderStatus(orderId, "delivered")
+            }
+        }
+    }
+
 
     // --- Safety & Moderation ---
     fun submitReport() {

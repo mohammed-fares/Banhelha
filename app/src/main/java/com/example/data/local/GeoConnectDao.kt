@@ -130,3 +130,31 @@ interface ReportDao {
     @Query("UPDATE reports SET status = :status WHERE id = :reportId")
     suspend fun updateReportStatus(reportId: Long, status: String)
 }
+
+@Dao
+interface OrderDao {
+    @Query("SELECT * FROM service_orders ORDER BY createdAt DESC")
+    fun getAllOrders(): Flow<List<ServiceOrderEntity>>
+
+    @Query("SELECT * FROM service_orders WHERE senderUserId = :userId OR recipientUserId = :userId ORDER BY createdAt DESC")
+    fun getOrdersForUser(userId: Long): Flow<List<ServiceOrderEntity>>
+
+    @Query("SELECT * FROM service_orders WHERE recipientUserId = :userId AND isGift = 1 ORDER BY createdAt DESC")
+    fun getGiftsReceivedByUser(userId: Long): Flow<List<ServiceOrderEntity>>
+
+    @Query("SELECT * FROM service_orders WHERE id = :orderId LIMIT 1")
+    suspend fun getOrderById(orderId: Long): ServiceOrderEntity?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertOrder(order: ServiceOrderEntity): Long
+
+    @Update
+    suspend fun updateOrder(order: ServiceOrderEntity)
+
+    @Query("UPDATE service_orders SET orderStatus = :status WHERE id = :orderId")
+    suspend fun updateOrderStatus(orderId: Long, status: String)
+
+    @Query("UPDATE service_orders SET paymentStatus = :paymentStatus, paymentReference = :ref WHERE id = :orderId")
+    suspend fun updatePaymentStatus(orderId: Long, paymentStatus: String, ref: String)
+}
+

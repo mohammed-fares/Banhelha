@@ -12,9 +12,10 @@ import com.example.data.model.*
         TrustRelationshipEntity::class,
         ChatMessageEntity::class,
         LocalServiceEntity::class,
-        ReportEntity::class
+        ReportEntity::class,
+        ServiceOrderEntity::class
     ],
-    version = 1,
+    version = 2,
     exportSchema = false
 )
 abstract class GeoConnectDatabase : RoomDatabase() {
@@ -23,6 +24,8 @@ abstract class GeoConnectDatabase : RoomDatabase() {
     abstract fun chatDao(): ChatDao
     abstract fun serviceDao(): ServiceDao
     abstract fun reportDao(): ReportDao
+    abstract fun orderDao(): OrderDao
+
 
     companion object {
         @Volatile

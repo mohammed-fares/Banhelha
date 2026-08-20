@@ -299,6 +299,7 @@ fun ServiceCard(
     onCallClick: () -> Unit,
     onChatClick: () -> Unit,
     onGoogleMapsClick: () -> Unit = {},
+    onOrderOrGiftClick: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     Card(
@@ -516,6 +517,26 @@ fun ServiceCard(
             }
 
             Spacer(modifier = Modifier.height(12.dp))
+
+            // Primary Action: Order Service or Send Gift
+            Button(
+                onClick = onOrderOrGiftClick,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(42.dp),
+                shape = RoundedCornerShape(12.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = Color(0xFF8B5CF6),
+                    contentColor = Color.White
+                )
+            ) {
+                Icon(Icons.Default.CardGiftcard, contentDescription = null, tint = Color.White, modifier = Modifier.size(17.dp))
+                Spacer(modifier = Modifier.width(6.dp))
+                Text("طلب الخدمة أو إهداؤها لمستخدم 🎁", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -585,6 +606,144 @@ fun ServiceCard(
         }
     }
 }
+
+@Composable
+fun ServiceOrderCard(
+    order: com.example.data.model.ServiceOrderEntity,
+    onChatWithProvider: () -> Unit = {},
+    modifier: Modifier = Modifier
+) {
+    val statusColor = when (order.orderStatus) {
+        "delivered" -> GeoGreenOnline
+        "out_for_delivery" -> Color(0xFF2563EB)
+        "cancelled" -> GeoRedError
+        else -> Color(0xFFF59E0B)
+    }
+
+    val statusText = when (order.orderStatus) {
+        "delivered" -> "تم التسليم بنجاح ✔"
+        "out_for_delivery" -> "في الطريق للتوصيل 🚚"
+        "cancelled" -> "تم الإلغاء"
+        else -> "جاري التجهيز من المتجر ⏳"
+    }
+
+    Card(
+        modifier = modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = GeoDarkSurface),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+        border = androidx.compose.foundation.BorderStroke(
+            1.dp,
+            if (order.isGift) Color(0xFFDDD6FE) else GeoDarkOutline
+        )
+    ) {
+        Column(modifier = Modifier.padding(14.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = if (order.isGift) "🎁 طلب إهداء لصديق" else "🛍️ طلب خدمة شخصي",
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = if (order.isGift) Color(0xFF7C3AED) else GeoDarkOnSurface
+                )
+
+                Surface(
+                    color = statusColor.copy(alpha = 0.12f),
+                    shape = RoundedCornerShape(8.dp)
+                ) {
+                    Text(
+                        text = statusText,
+                        color = statusColor,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            Text(
+                text = "المتجر / المزود: ${order.serviceTitle} (${order.providerName})",
+                fontSize = 13.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = GeoDarkOnSurface
+            )
+
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = "المنتجات / الخدمة: ${order.orderItems}",
+                fontSize = 12.sp,
+                color = Color(0xFF475569)
+            )
+
+            if (order.isGift && order.recipientName.isNotBlank()) {
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = "المستلم: ${order.recipientName} • ${order.recipientPhone}",
+                    fontSize = 12.sp,
+                    color = Color(0xFF6B21A8),
+                    fontWeight = FontWeight.Medium
+                )
+            }
+
+            if (order.giftGreeting.isNotBlank()) {
+                Spacer(modifier = Modifier.height(4.dp))
+                Surface(
+                    color = Color(0xFFFAF5FF),
+                    shape = RoundedCornerShape(8.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(
+                        text = "💌 كارت الإهداء: \"${order.giftGreeting}\"",
+                        fontSize = 11.sp,
+                        color = Color(0xFF581C87),
+                        modifier = Modifier.padding(8.dp)
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+            HorizontalDivider(color = GeoDarkOutline.copy(alpha = 0.5f))
+            Spacer(modifier = Modifier.height(8.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column {
+                    Text(
+                        text = "المبلغ: ${order.orderPrice.toInt()} ج.م (مدفوع مقدماً ✔)",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = GeoGreenOnline
+                    )
+                    Text(
+                        text = "بوابة الدفع: ${when(order.paymentGateway) { "fawry" -> "فوري 🟡"; "vodafone_cash" -> "فودافون كاش 🔴"; "instapay" -> "إنستاباي 🟣"; else -> "بطاقة بنكية 💳" }}",
+                        fontSize = 10.sp,
+                        color = Color(0xFF64748B)
+                    )
+                }
+
+                OutlinedButton(
+                    onClick = onChatWithProvider,
+                    shape = RoundedCornerShape(8.dp),
+                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                    modifier = Modifier.height(32.dp)
+                ) {
+                    Icon(Icons.Default.Chat, contentDescription = null, modifier = Modifier.size(13.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("متابعة", fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                }
+            }
+        }
+    }
+}
+
 
 @Composable
 fun DiscoveredPeerCard(

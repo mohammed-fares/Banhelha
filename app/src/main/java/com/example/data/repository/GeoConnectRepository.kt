@@ -11,6 +11,7 @@ class GeoConnectRepository(private val database: GeoConnectDatabase) {
     private val chatDao = database.chatDao()
     private val serviceDao = database.serviceDao()
     private val reportDao = database.reportDao()
+    private val orderDao = database.orderDao()
 
     val activeUsers: Flow<List<UserEntity>> = userDao.getAllActiveUsers()
     val blockedUsers: Flow<List<UserEntity>> = userDao.getBlockedUsers()
@@ -19,6 +20,23 @@ class GeoConnectRepository(private val database: GeoConnectDatabase) {
     val allServices: Flow<List<LocalServiceEntity>> = serviceDao.getAllServices()
     val allReports: Flow<List<ReportEntity>> = reportDao.getAllReports()
     val allTrustRelationships: Flow<List<TrustRelationshipEntity>> = trustDao.getAllTrustRelationships()
+    val allOrders: Flow<List<ServiceOrderEntity>> = orderDao.getAllOrders()
+
+    fun getOrdersForUser(userId: Long): Flow<List<ServiceOrderEntity>> =
+        orderDao.getOrdersForUser(userId)
+
+    fun getGiftsReceivedByUser(userId: Long): Flow<List<ServiceOrderEntity>> =
+        orderDao.getGiftsReceivedByUser(userId)
+
+    suspend fun insertOrder(order: ServiceOrderEntity): Long =
+        orderDao.insertOrder(order)
+
+    suspend fun updateOrderStatus(orderId: Long, status: String) =
+        orderDao.updateOrderStatus(orderId, status)
+
+    suspend fun updatePaymentStatus(orderId: Long, paymentStatus: String, ref: String) =
+        orderDao.updatePaymentStatus(orderId, paymentStatus, ref)
+
 
     fun getConversation(user1: Long, user2: Long): Flow<List<ChatMessageEntity>> =
         chatDao.getConversationMessages(user1, user2)

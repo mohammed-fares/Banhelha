@@ -99,3 +99,28 @@ data class ReportEntity(
     val status: String = "pending", // "pending", "reviewed", "resolved", "dismissed"
     val timestamp: Long = System.currentTimeMillis()
 )
+
+@Entity(tableName = "service_orders")
+data class ServiceOrderEntity(
+    @PrimaryKey(autoGenerate = true)
+    val id: Long = 0,
+    val serviceId: Long,
+    val serviceTitle: String,
+    val providerName: String,
+    val senderUserId: Long,
+    val senderName: String,
+    val recipientUserId: Long? = null, // null if self-ordered, non-null if gifted to another user
+    val recipientName: String = "",
+    val recipientPhone: String = "",
+    val deliveryAddress: String = "",
+    val giftGreeting: String = "", // e.g. "ألف مبروك النجاح يا غالي! 🎁"
+    val orderItems: String, // item details or service requested
+    val orderPrice: Double, // in EGP
+    val paymentGateway: String = "fawry", // "fawry", "vodafone_cash", "instapay", "card", "cash"
+    val paymentStatus: String = "paid", // "paid", "pending", "refunded"
+    val paymentReference: String = "",
+    val orderStatus: String = "preparing", // "preparing", "out_for_delivery", "delivered", "cancelled"
+    val isGift: Boolean = false,
+    val createdAt: Long = System.currentTimeMillis()
+)
+

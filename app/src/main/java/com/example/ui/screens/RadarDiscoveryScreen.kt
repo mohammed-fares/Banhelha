@@ -1,14 +1,10 @@
 package com.example.ui.screens
 
 import android.Manifest
-import android.content.Intent
-import android.net.Uri
-import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -26,14 +22,11 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -41,11 +34,9 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
 import com.example.R
 import com.example.data.model.UserEntity
-import com.example.data.nearby.DiscoveredPeer
-import com.example.data.nearby.PeerSource
-import com.example.ui.components.DiscoveredPeerCard
-import com.example.ui.components.RadarPeerView
+import com.example.ui.components.RadarView
 import com.example.ui.components.TrustLevelBadge
+import com.example.ui.components.UserCard
 import com.example.ui.theme.*
 import com.example.viewmodel.GeoConnectViewModel
 
@@ -56,39 +47,20 @@ fun RadarDiscoveryScreen(
     onNavigateToChat: (UserEntity) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val discoveredPeers by viewModel.discoveredPeers.collectAsStateWithLifecycle()
-    val isNearbyScanning by viewModel.isNearbyScanning.collectAsStateWithLifecycle()
-    val bluetoothEnabled by viewModel.bluetoothEnabled.collectAsStateWithLifecycle()
-    val wifiEnabled by viewModel.wifiEnabled.collectAsStateWithLifecycle()
-    val selectedPeer by viewModel.selectedPeer.collectAsStateWithLifecycle()
-    val peerSourceFilter by viewModel.peerSourceFilter.collectAsStateWithLifecycle()
-    val allTrusts by viewModel.allTrusts.collectAsStateWithLifecycle()
-
+    val activeUsers by viewModel.activeUsers.collectAsStateWithLifecycle()
+    val currentUser by viewModel.currentUser.collectAsStateWithLifecycle()
     val userLat by viewModel.userLat.collectAsStateWithLifecycle()
     val userLng by viewModel.userLng.collectAsStateWithLifecycle()
     val distanceFilter by viewModel.distanceFilterKm.collectAsStateWithLifecycle()
     val searchQuery by viewModel.searchQuery.collectAsStateWithLifecycle()
+    val genderFilter by viewModel.genderFilter.collectAsStateWithLifecycle()
     val viewMode by viewModel.viewMode.collectAsStateWithLifecycle()
+    val selectedUser by viewModel.selectedUser.collectAsStateWithLifecycle()
+    val selectedUserTrust by viewModel.selectedUserTrust.collectAsStateWithLifecycle()
     val hasLocationPermission by viewModel.hasLocationPermission.collectAsStateWithLifecycle()
     val isFetchingLocation by viewModel.isFetchingLocation.collectAsStateWithLifecycle()
 
-    val permissionsToRequest = remember {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            arrayOf(
-                Manifest.permission.ACCESS_FINE_LOCATION,
-                Manifest.permission.ACCESS_COARSE_LOCATION,
-                Manifest.permission.BLUETOOTH_SCAN,
-                Manifest.permission.BLUETOOTH_CONNECT
-            )
-        } else {
-            arrayOf(
-                Manifest.permission.ACCESS_FINE_LOCATION,
-                Manifest.permission.ACCESS_COARSE_LOCATION,
-                Manifest.permission.BLUETOOTH,
-                Manifest.permission.BLUETOOTH_ADMIN
-            )
-        }
-    }
+    var userFilterType by remember { mutableStateOf("all") } // "all", "online", "verified", "business"
 
     val permissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestMultiplePermissions()
@@ -96,41 +68,56 @@ fun RadarDiscoveryScreen(
         val grantedLoc = permissions[Manifest.permission.ACCESS_FINE_LOCATION] == true ||
                 permissions[Manifest.permission.ACCESS_COARSE_LOCATION] == true
         viewModel.onLocationPermissionResult(grantedLoc)
-        viewModel.startNearbyDiscovery()
     }
 
     LaunchedEffect(Unit) {
         if (!hasLocationPermission) {
-            permissionLauncher.launch(permissionsToRequest)
+            permissionLauncher.launch(
+                arrayOf(
+                    Manifest.permission.ACCESS_FINE_LOCATION,
+                    Manifest.permission.ACCESS_COARSE_LOCATION
+                )
+            )
         } else {
             viewModel.refreshLocationFromGps()
-            viewModel.startNearbyDiscovery()
         }
     }
 
-    // Filter peers by source, distance, and search query
-    val filteredPeers = remember(discoveredPeers, peerSourceFilter, distanceFilter, searchQuery) {
-        discoveredPeers.filter { peer ->
-            // Source Filter
-            val matchesSource = when (peerSourceFilter) {
-                "bluetooth" -> peer.source == PeerSource.BLUETOOTH
-                "wifi" -> peer.source == PeerSource.WIFI
-                "gps" -> peer.source == PeerSource.GPS_COMMUNITY
-                "uninstalled" -> !peer.hasAppInstalled
+    // Filter community users with the app installed
+    val filteredUsers = remember(activeUsers, currentUser, distanceFilter, genderFilter, userFilterType, searchQuery, userLat, userLng) {
+        activeUsers.filter { user ->
+            // Exclude self
+            if (currentUser != null && user.id == currentUser?.id) return@filter false
+
+            // Distance Calculation
+            val distMeters = viewModel.calculateDistanceMeters(
+                userLat, userLng, user.latitude, user.longitude
+            )
+            val withinDistance = (distMeters / 1000.0) <= distanceFilter
+
+            // Gender Filter
+            val matchesGender = when (genderFilter) {
+                "male" -> user.gender.equals("male", ignoreCase = true)
+                "female" -> user.gender.equals("female", ignoreCase = true)
                 else -> true
             }
 
-            // Distance filter
-            val withinDistance = (peer.distanceMeters / 1000.0) <= distanceFilter
-
-            // Search Filter
-            val matchesSearch = if (searchQuery.isBlank()) true else {
-                peer.name.contains(searchQuery, ignoreCase = true) ||
-                        peer.bioOrInfo.contains(searchQuery, ignoreCase = true) ||
-                        peer.macOrIdentifier.contains(searchQuery, ignoreCase = true)
+            // Category/Status Filter
+            val matchesStatus = when (userFilterType) {
+                "online" -> user.isActive
+                "verified" -> user.isVerified
+                "business" -> user.subscriptionType.equals("business", ignoreCase = true) || user.isStoreOwner
+                else -> true
             }
 
-            matchesSource && withinDistance && matchesSearch
+            // Search Query
+            val matchesSearch = if (searchQuery.isBlank()) true else {
+                user.name.contains(searchQuery, ignoreCase = true) ||
+                        user.bio.contains(searchQuery, ignoreCase = true) ||
+                        user.interests.contains(searchQuery, ignoreCase = true)
+            }
+
+            withinDistance && matchesGender && matchesStatus && matchesSearch
         }
     }
 
@@ -144,20 +131,20 @@ fun RadarDiscoveryScreen(
                 .fillMaxSize()
                 .statusBarsPadding()
         ) {
-            // Top App Bar with Hardware Status Badges
+            // Header Bar
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 6.dp),
+                    .padding(horizontal = 16.dp, vertical = 10.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Column {
+                Column(modifier = Modifier.weight(1f)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(
-                            text = stringResource(R.string.app_name),
-                            fontSize = 22.sp,
-                            fontWeight = FontWeight.Black,
+                            text = "رادار بنحلها الميداني",
+                            fontSize = 19.sp,
+                            fontWeight = FontWeight.Bold,
                             color = GeoDarkOnSurface
                         )
                         Spacer(modifier = Modifier.width(6.dp))
@@ -165,222 +152,62 @@ fun RadarDiscoveryScreen(
                             modifier = Modifier
                                 .size(8.dp)
                                 .clip(CircleShape)
-                                .background(GeoGreenOnline)
+                                .background(GeoTealPrimary)
                         )
                     }
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(
-                            text = if (isFetchingLocation) "📍 جاري تحديد GPS..." else "📍 GPS: %.4f, %.4f".format(userLat, userLng),
-                            fontSize = 11.sp,
-                            color = GeoTealPrimary
-                        )
-                        Spacer(modifier = Modifier.width(4.dp))
-                        IconButton(
-                            onClick = {
-                                if (hasLocationPermission) {
-                                    viewModel.refreshLocationFromGps()
-                                    viewModel.refreshNearbyDiscovery()
-                                } else {
-                                    permissionLauncher.launch(permissionsToRequest)
-                                }
-                            },
-                            modifier = Modifier.size(20.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Refresh,
-                                contentDescription = "Refresh GPS",
-                                tint = GeoTealPrimary,
-                                modifier = Modifier.size(14.dp)
-                            )
-                        }
-                    }
+                    Text(
+                        text = "مستخدمو التطبيق المتواجدون بالقرب منك حالياً",
+                        fontSize = 11.sp,
+                        color = Color(0xFF64748B)
+                    )
                 }
 
                 // View Mode Toggle (Radar vs List)
-                Surface(
-                    color = Color(0xFFF1F3F9),
-                    shape = RoundedCornerShape(12.dp),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, GeoDarkOutline)
-                ) {
-                    Row(modifier = Modifier.padding(3.dp)) {
-                        IconButton(
-                            onClick = { viewModel.viewMode.value = "radar" },
-                            modifier = Modifier
-                                .size(36.dp)
-                                .background(if (viewMode == "radar") GeoTealPrimary else Color.Transparent, RoundedCornerShape(10.dp))
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Radar,
-                                contentDescription = "Radar View",
-                                tint = if (viewMode == "radar") GeoTealOnPrimary else Color(0xFF74777F),
-                                modifier = Modifier.size(18.dp)
-                            )
-                        }
-                        IconButton(
-                            onClick = { viewModel.viewMode.value = "list" },
-                            modifier = Modifier
-                                .size(36.dp)
-                                .background(if (viewMode == "list") GeoTealPrimary else Color.Transparent, RoundedCornerShape(10.dp))
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.ViewAgenda,
-                                contentDescription = "List View",
-                                tint = if (viewMode == "list") GeoTealOnPrimary else Color(0xFF74777F),
-                                modifier = Modifier.size(18.dp)
-                            )
-                        }
-                    }
-                }
-            }
-
-            // Hardware Radio Status Strip (Bluetooth + Wi-Fi + GPS Scan Action)
-            Surface(
-                color = GeoDarkSurface,
-                shape = RoundedCornerShape(12.dp),
-                border = androidx.compose.foundation.BorderStroke(1.dp, GeoDarkOutline),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 2.dp)
-            ) {
                 Row(
-                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(Color(0xFFE2E8F0))
+                        .padding(3.dp),
+                    horizontalArrangement = Arrangement.spacedBy(2.dp)
                 ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        // Bluetooth Chip
-                        Surface(
-                            color = Color(0xFF2563EB).copy(alpha = 0.12f),
-                            shape = RoundedCornerShape(8.dp)
-                        ) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp)
-                            ) {
-                                Icon(Icons.Default.Bluetooth, contentDescription = null, tint = Color(0xFF2563EB), modifier = Modifier.size(13.dp))
-                                Spacer(modifier = Modifier.width(3.dp))
-                                Text(text = "بلوتوث نشط", fontSize = 10.sp, color = Color(0xFF2563EB), fontWeight = FontWeight.Bold)
-                            }
-                        }
-
-                        // Wi-Fi Chip
-                        Surface(
-                            color = Color(0xFF10B981).copy(alpha = 0.12f),
-                            shape = RoundedCornerShape(8.dp)
-                        ) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp)
-                            ) {
-                                Icon(Icons.Default.Wifi, contentDescription = null, tint = Color(0xFF10B981), modifier = Modifier.size(13.dp))
-                                Spacer(modifier = Modifier.width(3.dp))
-                                Text(text = "واي فاي نشط", fontSize = 10.sp, color = Color(0xFF10B981), fontWeight = FontWeight.Bold)
-                            }
-                        }
-                    }
-
-                    // Scan Nearby Button
-                    Button(
-                        onClick = {
-                            viewModel.refreshNearbyDiscovery()
-                            viewModel.startNearbyDiscovery()
-                        },
-                        colors = ButtonDefaults.buttonColors(containerColor = GeoTealPrimary),
-                        shape = RoundedCornerShape(8.dp),
-                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
-                        modifier = Modifier.height(28.dp)
+                    IconButton(
+                        onClick = { viewModel.viewMode.value = "radar" },
+                        modifier = Modifier
+                            .size(32.dp)
+                            .clip(RoundedCornerShape(9.dp))
+                            .background(if (viewMode == "radar") GeoTealPrimary else Color.Transparent)
+                            .testTag("radar_mode_button")
                     ) {
                         Icon(
-                            imageVector = Icons.Default.Sensors,
-                            contentDescription = "مسح المحيط",
-                            tint = Color.White,
-                            modifier = Modifier.size(13.dp)
+                            Icons.Default.Radar,
+                            contentDescription = "Radar View",
+                            tint = if (viewMode == "radar") GeoTealOnPrimary else Color(0xFF64748B),
+                            modifier = Modifier.size(16.dp)
                         )
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text("مسح الآن", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                    }
+                    IconButton(
+                        onClick = { viewModel.viewMode.value = "list" },
+                        modifier = Modifier
+                            .size(32.dp)
+                            .clip(RoundedCornerShape(9.dp))
+                            .background(if (viewMode == "list") GeoTealPrimary else Color.Transparent)
+                            .testTag("list_mode_button")
+                    ) {
+                        Icon(
+                            Icons.Default.FormatListBulleted,
+                            contentDescription = "List View",
+                            tint = if (viewMode == "list") GeoTealOnPrimary else Color(0xFF64748B),
+                            modifier = Modifier.size(16.dp)
+                        )
                     }
                 }
             }
 
-            Spacer(modifier = Modifier.height(6.dp))
-
-            // Multi-Source Filter Chips
-            LazyRow(
-                contentPadding = PaddingValues(horizontal = 16.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                item {
-                    FilterChip(
-                        selected = peerSourceFilter == "all",
-                        onClick = { viewModel.peerSourceFilter.value = "all" },
-                        label = { Text("الكل (${discoveredPeers.size})", fontSize = 11.sp, fontWeight = FontWeight.Bold) },
-                        colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = GeoTealPrimary,
-                            selectedLabelColor = Color.White
-                        )
-                    )
-                }
-                item {
-                    FilterChip(
-                        selected = peerSourceFilter == "bluetooth",
-                        onClick = { viewModel.peerSourceFilter.value = "bluetooth" },
-                        leadingIcon = { Icon(Icons.Default.Bluetooth, contentDescription = null, modifier = Modifier.size(14.dp)) },
-                        label = { Text("بلوتوث (${discoveredPeers.count { it.source == PeerSource.BLUETOOTH }})", fontSize = 11.sp) },
-                        colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = Color(0xFF2563EB),
-                            selectedLabelColor = Color.White
-                        )
-                    )
-                }
-                item {
-                    FilterChip(
-                        selected = peerSourceFilter == "wifi",
-                        onClick = { viewModel.peerSourceFilter.value = "wifi" },
-                        leadingIcon = { Icon(Icons.Default.Wifi, contentDescription = null, modifier = Modifier.size(14.dp)) },
-                        label = { Text("واي فاي (${discoveredPeers.count { it.source == PeerSource.WIFI }})", fontSize = 11.sp) },
-                        colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = Color(0xFF10B981),
-                            selectedLabelColor = Color.White
-                        )
-                    )
-                }
-                item {
-                    FilterChip(
-                        selected = peerSourceFilter == "gps",
-                        onClick = { viewModel.peerSourceFilter.value = "gps" },
-                        leadingIcon = { Icon(Icons.Default.LocationOn, contentDescription = null, modifier = Modifier.size(14.dp)) },
-                        label = { Text("أعضاء بنحلها (${discoveredPeers.count { it.source == PeerSource.GPS_COMMUNITY }})", fontSize = 11.sp) },
-                        colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = GeoAzureSecondary,
-                            selectedLabelColor = Color.White
-                        )
-                    )
-                }
-                item {
-                    FilterChip(
-                        selected = peerSourceFilter == "uninstalled",
-                        onClick = { viewModel.peerSourceFilter.value = "uninstalled" },
-                        leadingIcon = { Icon(Icons.Default.Send, contentDescription = null, modifier = Modifier.size(14.dp)) },
-                        label = { Text("أجهزة للدعوة ✉️ (${discoveredPeers.count { !it.hasAppInstalled }})", fontSize = 11.sp) },
-                        colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = Color(0xFFE11D48),
-                            selectedLabelColor = Color.White
-                        )
-                    )
-                }
-            }
-
-            Spacer(modifier = Modifier.height(6.dp))
-
-            // Search Box
+            // Quick Search Field
             OutlinedTextField(
                 value = searchQuery,
                 onValueChange = { viewModel.searchQuery.value = it },
-                placeholder = { Text("بحث باسم الشخص، الجهاز، أو البث...", fontSize = 12.sp, color = Color(0xFF74777F)) },
+                placeholder = { Text("بحث عن مستخدم، اهتمامات، فني...", fontSize = 12.sp, color = Color(0xFF74777F)) },
                 leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, tint = GeoTealPrimary, modifier = Modifier.size(18.dp)) },
                 trailingIcon = {
                     if (searchQuery.isNotEmpty()) {
@@ -403,362 +230,340 @@ fun RadarDiscoveryScreen(
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp)
                     .height(48.dp)
-                    .testTag("radar_search_input")
+                    .testTag("radar_search_field")
             )
 
-            Spacer(modifier = Modifier.height(6.dp))
+            Spacer(modifier = Modifier.height(8.dp))
 
-            // Controllable Distance Slider
-            Surface(
-                color = GeoDarkSurface,
-                shape = RoundedCornerShape(14.dp),
-                border = androidx.compose.foundation.BorderStroke(1.dp, GeoDarkOutline),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp)
+            // Filter Tabs
+            LazyRow(
+                contentPadding = PaddingValues(horizontal = 16.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Default.Radar, contentDescription = null, tint = GeoTealPrimary, modifier = Modifier.size(16.dp))
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text(
-                                text = "مؤشر نطاق الرادار:",
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = GeoDarkOnSurface
-                            )
-                        }
-
-                        Surface(
-                            color = GeoTealContainer,
-                            shape = RoundedCornerShape(8.dp)
-                        ) {
-                            Text(
-                                text = if (distanceFilter < 1f) "%.1f كم (محيط فوري)".format(distanceFilter)
-                                else "%.0f كم".format(distanceFilter),
-                                color = GeoTealPrimary,
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.Bold,
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
-                            )
-                        }
-                    }
-
-                    Slider(
-                        value = distanceFilter,
-                        onValueChange = { viewModel.distanceFilterKm.value = it },
-                        valueRange = 0.5f..50f,
-                        steps = 98,
-                        colors = SliderDefaults.colors(
-                            thumbColor = GeoTealPrimary,
-                            activeTrackColor = GeoTealPrimary,
-                            inactiveTrackColor = Color(0xFFE2E8F0)
-                        ),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(26.dp)
+                item {
+                    FilterChipItem(
+                        title = "الكل (${filteredUsers.size})",
+                        isSelected = userFilterType == "all",
+                        onClick = { userFilterType = "all" }
+                    )
+                }
+                item {
+                    FilterChipItem(
+                        title = "متصلون الآن 🟢",
+                        isSelected = userFilterType == "online",
+                        onClick = { userFilterType = "online" }
+                    )
+                }
+                item {
+                    FilterChipItem(
+                        title = "موثقون ⭐",
+                        isSelected = userFilterType == "verified",
+                        onClick = { userFilterType = "verified" }
+                    )
+                }
+                item {
+                    FilterChipItem(
+                        title = "فنيين ومتاجر 🏪",
+                        isSelected = userFilterType == "business",
+                        onClick = { userFilterType = "business" }
                     )
                 }
             }
 
-            Spacer(modifier = Modifier.height(4.dp))
+            Spacer(modifier = Modifier.height(8.dp))
 
-            // Main Content: Radar or List
-            AnimatedContent(
-                targetState = viewMode,
-                label = "view_mode_transition",
+            // Distance Range Slider Row
+            Row(
                 modifier = Modifier
-                    .weight(1f)
                     .fillMaxWidth()
-            ) { mode ->
-                if (mode == "radar") {
-                    Column(
+                    .padding(horizontal = 16.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.SocialDistance, contentDescription = null, tint = GeoTealPrimary, modifier = Modifier.size(14.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("نطاق الرادار: ${distanceFilter.toInt()} كم", fontSize = 11.sp, color = GeoDarkOnSurface, fontWeight = FontWeight.Medium)
+                }
+
+                // Quick refresh location
+                TextButton(
+                    onClick = { viewModel.refreshLocationFromGps() },
+                    contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp),
+                    modifier = Modifier.height(28.dp)
+                ) {
+                    if (isFetchingLocation) {
+                        CircularProgressIndicator(modifier = Modifier.size(12.dp), strokeWidth = 1.5.dp, color = GeoTealPrimary)
+                    } else {
+                        Icon(Icons.Default.MyLocation, contentDescription = null, tint = GeoTealPrimary, modifier = Modifier.size(12.dp))
+                    }
+                    Spacer(modifier = Modifier.width(3.dp))
+                    Text("تحديث موقعي", fontSize = 11.sp, color = GeoTealPrimary, fontWeight = FontWeight.Bold)
+                }
+            }
+
+            Slider(
+                value = distanceFilter,
+                onValueChange = { viewModel.distanceFilterKm.value = it },
+                valueRange = 1f..50f,
+                steps = 48,
+                colors = SliderDefaults.colors(
+                    thumbColor = GeoTealPrimary,
+                    activeTrackColor = GeoTealPrimary,
+                    inactiveTrackColor = Color(0xFFE2E8F0)
+                ),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp)
+                    .height(26.dp)
+            )
+
+            Spacer(modifier = Modifier.height(6.dp))
+
+            // Main Content Area (Radar vs List)
+            if (viewMode == "radar") {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(horizontal = 16.dp, vertical = 4.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    RadarView(
+                        centerLat = userLat,
+                        centerLng = userLng,
+                        maxDistanceKm = distanceFilter,
+                        users = filteredUsers,
+                        selectedUser = selectedUser,
+                        onUserSelected = { user ->
+                            viewModel.selectedUser.value = user
+                        },
+                        modifier = Modifier.fillMaxSize()
+                    )
+                }
+            } else {
+                if (filteredUsers.isEmpty()) {
+                    Box(
                         modifier = Modifier
                             .fillMaxSize()
-                            .padding(horizontal = 16.dp, vertical = 6.dp),
-                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                            .padding(32.dp),
+                        contentAlignment = Alignment.Center
                     ) {
-                        RadarPeerView(
-                            centerLat = userLat,
-                            centerLng = userLng,
-                            maxDistanceKm = distanceFilter,
-                            peers = filteredPeers,
-                            selectedPeer = selectedPeer,
-                            onPeerSelected = { peer -> viewModel.selectedPeer.value = peer },
-                            modifier = Modifier.weight(1f)
-                        )
-
-                        // Highlighted bottom card if peer tapped on radar
-                        if (selectedPeer != null) {
-                            DiscoveredPeerCard(
-                                peer = selectedPeer!!,
-                                distanceStr = if (selectedPeer!!.distanceMeters < 1000) "${selectedPeer!!.distanceMeters.toInt()} متر" else "%.1f كم".format(selectedPeer!!.distanceMeters / 1000.0),
-                                onCardClick = { /* open details */ },
-                                onInviteClick = { viewModel.invitePeerToDownload(selectedPeer!!, "share") },
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Icon(Icons.Default.Radar, contentDescription = null, tint = Color(0xFF94A3B8), modifier = Modifier.size(54.dp))
+                            Spacer(modifier = Modifier.height(12.dp))
+                            Text("لا يوجد مستخدمون في هذا النطاق حالياً", color = GeoDarkOnSurface, fontWeight = FontWeight.Bold)
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Text("جرب زيادة نطاق البحث بالكيلومترات لرؤية المزيد", color = Color(0xFF64748B), fontSize = 12.sp)
+                        }
+                    }
+                } else {
+                    LazyColumn(
+                        contentPadding = PaddingValues(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp),
+                        modifier = Modifier.fillMaxSize()
+                    ) {
+                        items(filteredUsers, key = { it.id }) { user ->
+                            val distMeters = viewModel.calculateDistanceMeters(
+                                userLat, userLng, user.latitude, user.longitude
+                            )
+                            val distanceStr = viewModel.formatDistance(distMeters)
+                            UserCard(
+                                user = user,
+                                distanceStr = distanceStr,
+                                trust = null,
+                                onCardClick = { viewModel.selectedUser.value = user },
+                                onPingClick = { viewModel.sendPing(user.id) },
                                 onChatClick = {
-                                    val u = selectedPeer!!.userEntity
-                                    if (u != null) {
-                                        viewModel.openChatWith(u)
-                                        onNavigateToChat(u)
-                                    }
+                                    viewModel.openChatWith(user)
+                                    onNavigateToChat(user)
                                 }
                             )
-                        } else {
-                            Surface(
-                                color = GeoDarkSurface,
-                                shape = RoundedCornerShape(14.dp),
-                                shadowElevation = 1.dp,
-                                border = androidx.compose.foundation.BorderStroke(1.dp, GeoDarkOutline),
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                Row(
-                                    modifier = Modifier.padding(10.dp),
-                                    verticalAlignment = Alignment.CenterVertically
+                        }
+                    }
+                }
+            }
+        }
+
+        // Bottom Sheet for Selected User
+        selectedUser?.let { user ->
+            val distMeters = viewModel.calculateDistanceMeters(
+                userLat, userLng, user.latitude, user.longitude
+            )
+            val distanceStr = viewModel.formatDistance(distMeters)
+
+            ModalBottomSheet(
+                onDismissRequest = { viewModel.selectedUser.value = null },
+                containerColor = GeoDarkSurface,
+                dragHandle = { BottomSheetDefaults.DragHandle(color = Color(0xFFCBD5E1)) }
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 20.dp, vertical = 8.dp)
+                        .verticalScroll(rememberScrollState())
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(64.dp)
+                                .clip(CircleShape)
+                                .background(Color(0xFFE2E8F0))
+                        ) {
+                            if (user.avatarUrl.isNotBlank()) {
+                                AsyncImage(
+                                    model = user.avatarUrl,
+                                    contentDescription = user.name,
+                                    modifier = Modifier.fillMaxSize(),
+                                    contentScale = ContentScale.Crop
+                                )
+                            } else {
+                                Icon(
+                                    Icons.Default.Person,
+                                    contentDescription = null,
+                                    tint = GeoTealPrimary,
+                                    modifier = Modifier
+                                        .size(36.dp)
+                                        .align(Alignment.Center)
+                                )
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.width(14.dp))
+
+                        Column(modifier = Modifier.weight(1f)) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(
+                                    text = user.name,
+                                    fontSize = 18.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = GeoDarkOnSurface
+                                )
+                                if (user.isVerified) {
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Icon(
+                                        Icons.Default.Verified,
+                                        contentDescription = "Verified",
+                                        tint = GeoTealPrimary,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                }
+                            }
+                            Text(
+                                text = "مستخدم نشط • يبعد عنك $distanceStr",
+                                fontSize = 12.sp,
+                                color = Color(0xFF64748B)
+                            )
+                            if (user.subscriptionType == "business") {
+                                Surface(
+                                    color = Color(0xFFEFF6FF),
+                                    shape = RoundedCornerShape(6.dp),
+                                    modifier = Modifier.padding(top = 3.dp)
                                 ) {
-                                    Icon(Icons.Default.TouchApp, contentDescription = null, tint = GeoAzureSecondary, modifier = Modifier.size(18.dp))
-                                    Spacer(modifier = Modifier.width(8.dp))
                                     Text(
-                                        text = "المس أي نقطة على الرادار (🔵 بلوتوث، 📶 واي فاي، 📍 GPS) لمعاينته ودعوته أو محادثته",
-                                        color = Color(0xFF49454F),
-                                        fontSize = 11.sp,
-                                        lineHeight = 16.sp
+                                        text = "متجر / حساب مهني 🏪",
+                                        fontSize = 10.sp,
+                                        color = Color(0xFF2563EB),
+                                        fontWeight = FontWeight.Bold,
+                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
                                     )
                                 }
                             }
                         }
                     }
-                } else {
-                    // List View
-                    if (filteredPeers.isEmpty()) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .padding(32.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Icon(Icons.Default.SensorsOff, contentDescription = null, tint = Color(0xFF94A3B8), modifier = Modifier.size(48.dp))
-                                Spacer(modifier = Modifier.height(12.dp))
-                                Text("لا توجد أجهزة أو أشخاص ضمن الفلتر المختار", color = GeoDarkOnSurface, fontWeight = FontWeight.Bold, fontSize = 15.sp)
-                                Spacer(modifier = Modifier.height(4.dp))
-                                Text("تأكد من تفعيل البلوتوث والواي فاي أو قم بتوسيع نطاق المسافة", color = Color(0xFF64748B), fontSize = 13.sp, textAlign = TextAlign.Center)
-                            }
-                        }
-                    } else {
-                        LazyColumn(
-                            contentPadding = PaddingValues(16.dp),
-                            verticalArrangement = Arrangement.spacedBy(12.dp),
-                            modifier = Modifier.fillMaxSize()
-                        ) {
-                            items(filteredPeers, key = { it.id }) { peer ->
-                                DiscoveredPeerCard(
-                                    peer = peer,
-                                    distanceStr = if (peer.distanceMeters < 1000) "${peer.distanceMeters.toInt()} متر" else "%.1f كم".format(peer.distanceMeters / 1000.0),
-                                    onCardClick = { viewModel.selectedPeer.value = peer },
-                                    onInviteClick = { viewModel.invitePeerToDownload(peer, "share") },
-                                    onChatClick = {
-                                        val u = peer.userEntity
-                                        if (u != null) {
-                                            viewModel.openChatWith(u)
-                                            onNavigateToChat(u)
-                                        }
-                                    }
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-        }
 
-        // Modal Sheet for Discovered Peer Details & Invitation Sheet
-        if (selectedPeer != null) {
-            val peer = selectedPeer!!
-            val user = peer.userEntity
-            val targetTrust = allTrusts.firstOrNull { it.targetUserId == (user?.id ?: -1L) }
+                    Spacer(modifier = Modifier.height(14.dp))
 
-            ModalBottomSheet(
-                onDismissRequest = { viewModel.selectedPeer.value = null },
-                containerColor = GeoDarkSurface,
-                dragHandle = { BottomSheetDefaults.DragHandle(color = GeoDarkOutline) }
-            ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 24.dp, vertical = 12.dp)
-                        .verticalScroll(rememberScrollState())
-                ) {
-                    // Header
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(16.dp)
-                    ) {
-                        val sourceColor = when (peer.source) {
-                            PeerSource.BLUETOOTH -> Color(0xFF2563EB)
-                            PeerSource.WIFI -> Color(0xFF10B981)
-                            PeerSource.GPS_COMMUNITY -> GeoTealPrimary
-                        }
-
-                        Box(
-                            modifier = Modifier
-                                .size(68.dp)
-                                .clip(RoundedCornerShape(20.dp))
-                                .background(sourceColor.copy(alpha = 0.15f))
-                                .border(2.dp, sourceColor, RoundedCornerShape(20.dp)),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                imageVector = when (peer.source) {
-                                    PeerSource.BLUETOOTH -> Icons.Default.Bluetooth
-                                    PeerSource.WIFI -> Icons.Default.Wifi
-                                    PeerSource.GPS_COMMUNITY -> Icons.Default.Person
-                                },
-                                contentDescription = peer.name,
-                                tint = sourceColor,
-                                modifier = Modifier.size(34.dp)
-                            )
-                        }
-
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = peer.name,
-                                color = GeoDarkOnSurface,
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 18.sp
-                            )
-                            Spacer(modifier = Modifier.height(2.dp))
-                            Text(
-                                text = "📍 على بعد ${if (peer.distanceMeters < 1000) "${peer.distanceMeters.toInt()} متر" else "%.1f كم".format(peer.distanceMeters / 1000.0)} • إشارة: ${peer.signalDbm} dBm",
-                                color = GeoAzureSecondary,
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.SemiBold
-                            )
-                            Spacer(modifier = Modifier.height(4.dp))
-                            Surface(
-                                color = if (peer.hasAppInstalled) GeoTealContainer else Color(0xFFFFE4E6),
-                                shape = RoundedCornerShape(8.dp)
-                            ) {
-                                Text(
-                                    text = if (peer.hasAppInstalled) "عضو مسجل في بنحلها ✔" else "جهاز مكتشف مجاور (غير مثبت للتطبيق)",
-                                    color = if (peer.hasAppInstalled) GeoTealPrimary else Color(0xFFE11D48),
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
-                                )
-                            }
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(16.dp))
-
-                    // Hardware Details Box
-                    Surface(
-                        color = Color(0xFFF8FAFC),
-                        shape = RoundedCornerShape(12.dp),
-                        border = androidx.compose.foundation.BorderStroke(1.dp, GeoDarkOutline),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Column(modifier = Modifier.padding(12.dp)) {
-                            Text(text = "بيانات الاكتشاف والاتصال:", fontWeight = FontWeight.Bold, fontSize = 12.sp, color = GeoDarkOnSurface)
-                            Spacer(modifier = Modifier.height(4.dp))
-                            Text(text = "• المصدر: ${if (peer.source == PeerSource.BLUETOOTH) "بث البلوتوث المفتوح (BLE Broadcast)" else if (peer.source == PeerSource.WIFI) "الشبكة المحلية / نقطة واي فاي" else "مشاركة الموقع الجغرافي الحي GPS"}", fontSize = 11.sp, color = Color(0xFF475569))
-                            if (peer.macOrIdentifier.isNotBlank()) {
-                                Text(text = "• العنوان / المعرف: ${peer.macOrIdentifier}", fontSize = 11.sp, color = Color(0xFF475569))
-                            }
-                            if (peer.bioOrInfo.isNotBlank()) {
-                                Text(text = "• ملاحظات: ${peer.bioOrInfo}", fontSize = 11.sp, color = Color(0xFF475569))
-                            }
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(16.dp))
-
-                    // Actions
-                    if (!peer.hasAppInstalled) {
+                    if (user.bio.isNotBlank()) {
                         Text(
-                            text = "إرسال دعوة للانضمام إلى بنحلها:",
-                            fontWeight = FontWeight.Bold,
+                            text = user.bio,
                             fontSize = 13.sp,
-                            color = GeoDarkOnSurface
+                            color = GeoDarkOnSurface,
+                            lineHeight = 19.sp
                         )
-                        Spacer(modifier = Modifier.height(8.dp))
+                        Spacer(modifier = Modifier.height(10.dp))
+                    }
 
+                    if (user.interests.isNotBlank()) {
+                        Text("الاهتمامات والخدمات:", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFF64748B))
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(user.interests, fontSize = 12.sp, color = GeoDarkOnSurface)
+                        Spacer(modifier = Modifier.height(14.dp))
+                    }
+
+                    // Trust progression
+                    Text("مستوى الأمان والتحقق:", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFF64748B))
+                    Spacer(modifier = Modifier.height(6.dp))
+                    TrustLevelBadge(trust = selectedUserTrust)
+
+                    Spacer(modifier = Modifier.height(20.dp))
+
+                    // Action Buttons
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
                         Button(
-                            onClick = { viewModel.invitePeerToDownload(peer, "whatsapp") },
-                            modifier = Modifier.fillMaxWidth(),
+                            onClick = {
+                                viewModel.openChatWith(user)
+                                viewModel.selectedUser.value = null
+                                onNavigateToChat(user)
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = GeoTealPrimary),
                             shape = RoundedCornerShape(12.dp),
-                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF25D366))
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(46.dp)
                         ) {
-                            Icon(Icons.Default.Chat, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text("دعوة عبر واتساب (WhatsApp)", fontWeight = FontWeight.Bold, color = Color.White)
+                            Icon(Icons.Default.Chat, contentDescription = null, tint = GeoTealOnPrimary, modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("بدء محادثة", fontWeight = FontWeight.Bold, color = GeoTealOnPrimary)
                         }
-
-                        Spacer(modifier = Modifier.height(8.dp))
-
-                        Button(
-                            onClick = { viewModel.invitePeerToDownload(peer, "sms") },
-                            modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(12.dp),
-                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF3B82F6))
-                        ) {
-                            Icon(Icons.Default.Sms, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text("دعوة عبر رسالة نصية SMS", fontWeight = FontWeight.Bold, color = Color.White)
-                        }
-
-                        Spacer(modifier = Modifier.height(8.dp))
 
                         OutlinedButton(
-                            onClick = { viewModel.invitePeerToDownload(peer, "share") },
-                            modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(12.dp)
+                            onClick = { viewModel.sendPing(user.id) },
+                            shape = RoundedCornerShape(12.dp),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, GeoTealPrimary),
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(46.dp)
                         ) {
-                            Icon(Icons.Default.Share, contentDescription = null, tint = GeoTealPrimary, modifier = Modifier.size(18.dp))
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text("مشاركة رابط التحميل عبر التطبيقات الأخرى", fontWeight = FontWeight.Bold, color = GeoTealPrimary)
-                        }
-                    } else if (user != null) {
-                        // Community user actions
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(10.dp)
-                        ) {
-                            OutlinedButton(
-                                onClick = { viewModel.sendPing(user.id) },
-                                modifier = Modifier.weight(1f),
-                                shape = RoundedCornerShape(12.dp)
-                            ) {
-                                Icon(Icons.Default.Favorite, contentDescription = null, tint = GeoTealPrimary, modifier = Modifier.size(18.dp))
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text("إرسال Ping", fontWeight = FontWeight.Bold)
-                            }
-
-                            Button(
-                                onClick = {
-                                    viewModel.openChatWith(user)
-                                    viewModel.selectedPeer.value = null
-                                    onNavigateToChat(user)
-                                },
-                                modifier = Modifier.weight(1.2f),
-                                shape = RoundedCornerShape(12.dp),
-                                colors = ButtonDefaults.buttonColors(containerColor = GeoTealPrimary)
-                            ) {
-                                Icon(Icons.Default.Chat, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text("بدء محادثة فورية", color = Color.White, fontWeight = FontWeight.Bold)
-                            }
+                            Icon(Icons.Default.Favorite, contentDescription = null, tint = GeoTealPrimary, modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("إرسال Ping", fontWeight = FontWeight.Bold, color = GeoTealPrimary)
                         }
                     }
 
-                    Spacer(modifier = Modifier.height(24.dp))
+                    Spacer(modifier = Modifier.height(18.dp))
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun FilterChipItem(
+    title: String,
+    isSelected: Boolean,
+    onClick: () -> Unit
+) {
+    Surface(
+        color = if (isSelected) GeoTealPrimary else Color(0xFFF1F3F9),
+        shape = RoundedCornerShape(10.dp),
+        border = androidx.compose.foundation.BorderStroke(
+            1.dp,
+            if (isSelected) GeoTealPrimary else GeoDarkOutline
+        ),
+        modifier = Modifier.clickable { onClick() }
+    ) {
+        Text(
+            text = title,
+            color = if (isSelected) GeoTealOnPrimary else Color(0xFF49454F),
+            fontSize = 11.sp,
+            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+        )
     }
 }

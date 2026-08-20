@@ -34,7 +34,6 @@ enum class MainTab(
     val testTag: String
 ) {
     RADAR(R.string.tab_radar, Icons.Default.Radar, Icons.Outlined.Radar, "tab_radar"),
-    MAP(R.string.tab_map, Icons.Default.Map, Icons.Outlined.Map, "tab_map"),
     SERVICES(R.string.tab_services, Icons.Default.Storefront, Icons.Outlined.Storefront, "tab_services"),
     CHATS(R.string.tab_chats, Icons.Default.Chat, Icons.Outlined.Chat, "tab_chats"),
     PROFILE(R.string.tab_profile, Icons.Default.Person, Icons.Outlined.Person, "tab_profile")
@@ -233,10 +232,6 @@ fun MainScreen(
                                 viewModel = viewModel,
                                 onNavigateToChat = { user -> viewModel.openChatWith(user) }
                             )
-                            MainTab.MAP -> MapScreen(
-                                viewModel = viewModel,
-                                onOpenChat = { user -> viewModel.openChatWith(user) }
-                            )
                             MainTab.SERVICES -> ServicesMarketplaceScreen(
                                 viewModel = viewModel,
                                 onNavigateToChat = { user -> viewModel.openChatWith(user) }
@@ -249,6 +244,7 @@ fun MainScreen(
                                 viewModel = viewModel,
                                 onNavigateToAdmin = { inAdminScreen = true }
                             )
+
                         }
                     }
                 }
